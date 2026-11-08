@@ -1,0 +1,124 @@
+{
+  "name": "claude-sessions",
+  "displayName": "Claude Sessions",
+  "description": "Side view of the Claude Code sessions of the current project, with their status and latest executive summary; stands up the sessions declared in .claude/sessions.json.",
+  "version": "0.1.0",
+  "publisher": "sohoffice",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sohoffice/sohoffice-claude.git"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claudeSessions",
+          "title": "Claude Sessions",
+          "icon": "media/sessions.svg"
+        }
+      ]
+    },
+    "views": {
+      "claudeSessions": [
+        {
+          "id": "claudeSessions.list",
+          "name": "Sessions",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "claudeSessions.standUp",
+        "title": "Claude Sessions: Stand Up All Sessions",
+        "icon": "$(play)"
+      },
+      {
+        "command": "claudeSessions.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "claudeSessions.open",
+        "title": "Open Session Terminal"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "claudeSessions.standUp",
+          "when": "view == claudeSessions.list",
+          "group": "navigation"
+        },
+        {
+          "command": "claudeSessions.refresh",
+          "when": "view == claudeSessions.list",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "claudeSessions.open",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Claude Sessions",
+      "properties": {
+        "claudeSessions.claudePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the claude CLI. Empty: ~/.local/bin/claude, then claude on PATH."
+        },
+        "claudeSessions.refreshSeconds": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "description": "How often the view refreshes while visible."
+        },
+        "claudeSessions.allProjects": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the sessions of every project, not only the current workspace's."
+        },
+        "claudeSessions.standUpOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stand up the sessions declared in .claude/sessions.json when the folder opens, resuming each one's latest conversation."
+        },
+        "claudeSessions.terminalLocation": {
+          "type": "string",
+          "enum": [
+            "editor",
+            "panel"
+          ],
+          "default": "editor",
+          "description": "Where session terminals open."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "~1.100.0",
+    "@vscode/vsce": "^4.1.0",
+    "typescript": "^5.9.0"
+  }
+}
