@@ -1,0 +1,50 @@
+{
+  "name": "markdown-preview-fluent",
+  "displayName": "Markdown Preview Fluent",
+  "description": "Personal style for the built-in Markdown preview: white page, readable text, left H1-H3 navigation, Cmd+Left/Right back/forward.",
+  "publisher": "douglas-local",
+  "version": "0.0.12",
+  "private": true,
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "markdown.previewStyles": [
+      "./preview.css"
+    ],
+    "markdown.previewScripts": [
+      "./preview.js"
+    ],
+    "keybindings": [
+      {
+        "command": "markdownPreviewFluent.back",
+        "key": "alt+left",
+        "mac": "cmd+left",
+        "when": "activeCustomEditorId == 'vscode.markdown.preview.editor'"
+      },
+      {
+        "command": "markdownPreviewFluent.forward",
+        "key": "alt+right",
+        "mac": "cmd+right",
+        "when": "activeCustomEditorId == 'vscode.markdown.preview.editor'"
+      }
+    ],
+    "commands": [
+      {
+        "command": "markdownPreviewFluent.back",
+        "title": "Markdown Preview: Back"
+      },
+      {
+        "command": "markdownPreviewFluent.forward",
+        "title": "Markdown Preview: Forward"
+      }
+    ]
+  }
+}

@@ -16,6 +16,7 @@
 |---|---|---|
 | [全域 skills](skills/) | Claude Code skills | 所有專案共用的 skills（checkout、commit-pr、harness、pr-review、requirement-design、task-execution、task-planning、testing-document），以 `just deploy-skills` 部署到 `~/.claude/skills/` |
 | [Claude Sessions](vscode/claude-sessions/README.md) | VS Code 擴充套件 | 在側邊欄列出目前專案所有 Claude Code session 與狀態（busy、需要回應、idle、未執行），點一下就切到該 session 的終端機 |
+| [Markdown Preview Fluent](vscode/markdown-preview-fluent/README.md) | VS Code 擴充套件 | 調整內建 Markdown 預覽的樣式：白底、易讀的字體、左側 H1 到 H3 導覽，以及在預覽編輯器中用 Cmd+Left/Right 上一頁、下一頁 |
 
 ## 目錄結構
 

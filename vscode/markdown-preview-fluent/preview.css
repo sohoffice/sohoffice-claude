@@ -1,0 +1,127 @@
+/* Built-in Markdown preview: white page whatever the editor theme.
+   Selectors start with html body.vscode-body to win over .vscode-dark rules. */
+
+html,
+html body.vscode-body {
+  background-color: #fff;
+  color: #24292f;
+}
+
+html body.vscode-body {
+  max-width: none;
+  padding: 0 24px 0 40px; /* small right padding */
+}
+
+html body.vscode-body h1,
+html body.vscode-body h2,
+html body.vscode-body h3,
+html body.vscode-body h4,
+html body.vscode-body h5,
+html body.vscode-body h6 {
+  color: #1f2328;
+  line-height: 1.35;
+}
+
+html body.vscode-body h1,
+html body.vscode-body h2,
+html body.vscode-body hr {
+  border-color: #d8dee4;
+}
+
+html body.vscode-body a {
+  color: #0969da;
+}
+
+html body.vscode-body code {
+  color: #1f2328;
+  background-color: #eff1f3;
+}
+
+html body.vscode-body pre,
+html body.vscode-body pre code {
+  color: #1f2328;
+  background-color: #f6f8fa;
+}
+
+html body.vscode-body blockquote {
+  color: #57606a;
+  background: transparent;
+  border-left-color: #d0d7de;
+}
+
+html body.vscode-body table th,
+html body.vscode-body table td {
+  border-color: #d0d7de;
+}
+
+html body.vscode-body table tr {
+  background-color: #fff;
+}
+
+/* Syntax highlighting: a light palette. Every token first falls back to the text colour,
+   so tokens the palette does not name (params, subst, formula, ...) never keep a dark-theme colour. */
+html body.vscode-body [class*='hljs-'] { color: inherit; }
+html body.vscode-body .hljs-comment,
+html body.vscode-body .hljs-quote { color: #6e7781; }
+html body.vscode-body .hljs-keyword,
+html body.vscode-body .hljs-selector-tag,
+html body.vscode-body .hljs-type { color: #cf222e; }
+html body.vscode-body .hljs-string,
+html body.vscode-body .hljs-regexp,
+html body.vscode-body .hljs-addition { color: #0a3069; }
+html body.vscode-body .hljs-number,
+html body.vscode-body .hljs-literal,
+html body.vscode-body .hljs-attr,
+html body.vscode-body .hljs-attribute,
+html body.vscode-body .hljs-variable { color: #0550ae; }
+html body.vscode-body .hljs-title,
+html body.vscode-body .hljs-function,
+html body.vscode-body .hljs-section { color: #8250df; }
+html body.vscode-body .hljs-built_in,
+html body.vscode-body .hljs-name,
+html body.vscode-body .hljs-tag { color: #116329; }
+html body.vscode-body .hljs-deletion { color: #82071e; }
+
+/* Left side navigation (preview.js) */
+html body.vscode-body {
+  padding-left: 280px; /* 240px nav + 40px gap */
+}
+
+#md-side-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 20px 12px 32px 16px;
+  background-color: #fff;
+  border-right: 1px solid #d8dee4;
+  font-size: 13px;
+  line-height: 1.5;
+  z-index: 10;
+}
+
+#md-side-nav a {
+  display: block;
+  padding: 3px 6px;
+  border-radius: 4px;
+  color: #24292f;
+  text-decoration: none;
+}
+
+#md-side-nav a:hover {
+  background-color: #f3f4f6;
+  color: #0969da;
+}
+
+#md-side-nav .md-side-nav-h1 { font-weight: 600; }
+#md-side-nav .md-side-nav-h2 { padding-left: 14px; }
+#md-side-nav .md-side-nav-h3 { padding-left: 28px; color: #57606a; }
+
+/* Narrow preview: drop the nav, give the content the width back */
+@media (max-width: 700px) {
+  #md-side-nav { display: none; }
+  html body.vscode-body { padding-left: 24px; }
+}
