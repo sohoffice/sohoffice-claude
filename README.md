@@ -39,17 +39,9 @@ just deploy-skills
 - 只檢查、不部署：`just check-skills`。
 - 執行中的 session 只在啟動時載入 skills，部署後要請它們重讀改過的 `SKILL.md`。
 
-### 在 session 啟動時提醒
+### 每天檢查
 
-在 `~/.claude/settings.json` 的 `hooks.SessionStart` 加上這個 hook。之後只要 `~/.claude/skills/` 被 repo 以外的方式改過，每個 Claude Code session 啟動時都會顯示提醒：
-
-```json
-{
-  "type": "command",
-  "command": "~/workspaces/sohoffice-claude/scripts/skills.sh hook",
-  "timeout": 10
-}
-```
+在 Claude 桌面版的 Code 分頁建立一個本機排程任務：每天執行、只在這台電腦上、工作資料夾設為這個 repo。任務的指示是執行 `just check-skills`；有差異時列出改了什麼並發 macOS 通知，但不修改、不部署任何東西。本機排程任務只在 app 開著、電腦醒著時執行；錯過的話，下次啟動或喚醒時會補跑最近一次。
 
 ## 新增項目
 

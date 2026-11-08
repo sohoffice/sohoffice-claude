@@ -8,6 +8,7 @@ description: Duties of the harness session, which maintains skills, CLAUDE.md fi
 ## Contents
 
 - [Scope](#scope)
+- [Agent sessions](#agent-sessions)
 - [Broadcast on every update](#broadcast-on-every-update)
 - [Choosing the recipients](#choosing-the-recipients)
 - [Message content](#message-content)
@@ -22,9 +23,35 @@ The harness session owns the configuration that shapes other sessions' behaviour
 | Level | Artefacts | Affects |
 | :--- | :--- | :--- |
 | Global | `~/.claude/CLAUDE.md`, `~/.claude/skills/`, `~/.claude/settings.json`, global hooks | All sessions |
-| Project | `<project>/.claude/skills/`, `<project>/CLAUDE.md`, `<project>/.claude/settings*.json`, project hooks | Sessions of that project |
+| Project | `<project>/.claude/skills/`, `<project>/CLAUDE.md`, `<project>/.claude/settings*.json`, `<project>/.claude/sessions.json`, project hooks | Sessions of that project |
 
-Global skills are version controlled in `~/workspaces/sohoffice-claude/skills/`, a public repository. Edit them there, commit, then run `just deploy-skills` in that repository to copy them to `~/.claude/skills/`; never edit the deployed copies: the next deploy stops on them, and every session start warns about them (`just check-skills` shows the changes). Skills there that the repository does not hold (such as `synced/`) are not ours to manage. Keep project specifics (Slack IDs, GitHub App names, project names) out of global skills: they belong in each project's instructions.
+Global skills are version controlled in `~/workspaces/sohoffice-claude/skills/`, a public repository. Edit them there, commit, then run `just deploy-skills` in that repository to copy them to `~/.claude/skills/`; never edit the deployed copies: the next deploy stops on them, and the daily check reports them (`just check-skills` shows the changes). Skills there that the repository does not hold (such as `synced/`) are not ours to manage. Keep project specifics (Slack IDs, GitHub App names, project names) out of global skills: they belong in each project's instructions.
+
+## Agent sessions
+
+A project that runs one session per role declares them in `<project>/.claude/sessions.json`. The Claude Sessions VS Code extension (`vscode/claude-sessions` in `sohoffice-claude`) reads it and, when the folder opens, starts each declared session that is not already running, resuming its latest conversation:
+
+```json
+{
+  "project": "myapp",
+  "sessions": [
+    { "role": "orchestrator", "skill": "orchestrator", "remoteControl": true },
+    { "role": "developer", "skill": "ticket-developer" }
+  ]
+}
+```
+
+| Field | Meaning |
+| :--- | :--- |
+| `project` | Session name prefix; the session is named `<project> <role>`. Defaults to the folder name |
+| `sessions[].role` | The role, as the project's role table names it (the session name's ending) |
+| `sessions[].skill` | The skill that defines the role; the session invokes it at start and after a compaction |
+| `sessions[].remoteControl` | `true` to start the session with Remote Control, so the human can drive it from claude.ai/code or the Claude app |
+
+- **When to create it.** When the project defines roles (a role table in its `CLAUDE.md`, or one skill per role) and the human wants the sessions stood up together. Take the roles and skills from the role table; invent none.
+- **Order.** The file's order is the order the extension lists and starts the sessions in; put the role the human talks to first, such as the orchestrator.
+- **Keep it in step.** Adding, renaming or removing a role or its skill updates `sessions.json` in the same change. It is a project artefact: broadcast the change like any other.
+- **One way to start sessions.** If the project also starts sessions some other way, such as VS Code tasks in `.vscode/tasks.json` run on folder open, remove that in the same change, or every session starts twice.
 
 ## Broadcast on every update
 
