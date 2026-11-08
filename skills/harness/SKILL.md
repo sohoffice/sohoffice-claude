@@ -35,8 +35,8 @@ A project that runs one session per role declares them in `<project>/.claude/ses
 {
   "project": "myapp",
   "sessions": [
-    { "role": "orchestrator", "skill": "orchestrator", "remoteControl": true },
-    { "role": "developer", "skill": "ticket-developer" }
+    { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true },
+    { "role": "UI developer", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
   ]
 }
 ```
@@ -45,7 +45,8 @@ A project that runs one session per role declares them in `<project>/.claude/ses
 | :--- | :--- |
 | `project` | Session name prefix; the session is named `<project> <role>`. Defaults to the folder name |
 | `sessions[].role` | The role, as the project's role table names it (the session name's ending) |
-| `sessions[].skill` | The skill that defines the role; the session invokes it at start and after a compaction |
+| `sessions[].skills` | The skills the session invokes at start and after a compaction, in order; the first defines the role. `"skill": "<name>"` is accepted for one skill |
+| `sessions[].description` | Optional words on the role for the system prompt, such as `owning the back end` |
 | `sessions[].remoteControl` | `true` to start the session with Remote Control, so the human can drive it from claude.ai/code or the Claude app |
 
 - **When to create it.** When the project defines roles (a role table in its `CLAUDE.md`, or one skill per role) and the human wants the sessions stood up together. Take the roles and skills from the role table; invent none.

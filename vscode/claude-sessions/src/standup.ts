@@ -6,14 +6,24 @@ import * as path from 'path';
 // {
 //   "project": "myapp",
 //   "sessions": [
-//     { "role": "orchestrator", "skill": "orchestrator", "remoteControl": true },
-//     { "role": "developer", "skill": "ticket-developer" }
+//     { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true },
+//     { "role": "UI developer", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
 //   ]
 // }
 // The session name is "<project> <role>"; the system prompt and stand-up message come from the templates below.
+// "skill": "<name>" is accepted for a single skill.
 export interface SessionSpec {
   role: string;
-  skill: string;
+  skills: string[];
+  description?: string;
+  remoteControl?: boolean;
+}
+
+interface RawSpec {
+  role?: string;
+  skill?: string;
+  skills?: string[];
+  description?: string;
   remoteControl?: boolean;
 }
 
@@ -31,9 +41,15 @@ export const STAND_UP =
 export function readManifest(folder: string): Manifest | undefined {
   const file = path.join(folder, MANIFEST_PATH);
   if (!fs.existsSync(file)) return undefined;
-  const json = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<Manifest>;
+  const json = JSON.parse(fs.readFileSync(file, 'utf8')) as { project?: string; sessions?: RawSpec[] };
   const project = json.project || path.basename(folder);
-  const sessions = (json.sessions ?? []).filter(s => s && s.role && s.skill);
+  const sessions: SessionSpec[] = [];
+  for (const s of json.sessions ?? []) {
+    const skills = (s?.skills ?? (s?.skill ? [s.skill] : [])).filter(Boolean);
+    // A session with no role or no skill cannot be named or told its role: skip it.
+    if (!s?.role || !skills.length) continue;
+    sessions.push({ role: s.role, skills, description: s.description, remoteControl: s.remoteControl });
+  }
   return { project, sessions };
 }
 
@@ -41,10 +57,14 @@ export function sessionName(manifest: Manifest, spec: SessionSpec): string {
   return `${manifest.project} ${spec.role}`;
 }
 
+// The first skill defines the role; the others load after it, in order.
 export function systemPrompt(manifest: Manifest, spec: SessionSpec): string {
-  return `You are the ${spec.role} of the ${manifest.project} project. ` +
+  const [first, ...rest] = spec.skills;
+  const description = spec.description ? `, ${spec.description}` : '';
+  return `You are the ${spec.role} of the ${manifest.project} project${description}. ` +
     'At session start, and whenever their content is no longer in your context (for example after a compaction), ' +
-    `follow the project CLAUDE.md and invoke the ${spec.skill} skill, which defines your role.`;
+    `follow the project CLAUDE.md and invoke the ${first} skill, which defines your role` +
+    rest.map(s => `, and the ${s} skill`).join('') + '.';
 }
 
 // Claude Code keeps transcripts in ~/.claude/projects/<cwd with non-alphanumerics as "-">/<session id>.jsonl.

@@ -34,8 +34,8 @@ Put the project's agent sessions in `.claude/sessions.json` at the workspace fol
 {
   "project": "myapp",
   "sessions": [
-    { "role": "orchestrator", "skill": "orchestrator", "remoteControl": true },
-    { "role": "developer", "skill": "ticket-developer" }
+    { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true },
+    { "role": "UI developer", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
   ]
 }
 ```
@@ -44,15 +44,16 @@ Put the project's agent sessions in `.claude/sessions.json` at the workspace fol
 |---|---|
 | `project` | Session name prefix; defaults to the folder name |
 | `sessions[].role` | Role; the session is named `<project> <role>` |
-| `sessions[].skill` | Skill the session invokes to load its role |
+| `sessions[].skills` | Skills the session invokes, in order; the first defines the role. `"skill": "<name>"` is accepted for a single skill |
+| `sessions[].description` | Optional words on the role, added to the system prompt after the project, such as `owning the back end` |
 | `sessions[].remoteControl` | Start the session with Remote Control (`--remote-control <name>`), to drive it from claude.ai/code or the Claude app |
 
 When the folder opens, and with **Claude Sessions: Stand Up All Sessions** (the play button on the view), each declared session that has no terminal in this window and no live process elsewhere starts in its own terminal, named after the session:
 
 - It resumes the newest conversation in the folder whose latest title is the session name, so a window reload brings each role back where it was.
 - With no such conversation, it starts a new one and sends the stand-up message.
-- The system prompt is `You are the <role> of the <project> project. At session start, and whenever their content is no longer in your context (for example after a compaction), follow the project CLAUDE.md and invoke the <skill> skill, which defines your role.`
-- The stand-up message is `Stand up: load your role's instructions as your system prompt says, confirm your role in one or two lines, then wait for instructions. Do not start any work yet.`
+- The system prompt is `You are the <role> of the <project> project[, <description>]. At session start, and whenever their content is no longer in your context (for example after a compaction), follow the project CLAUDE.md and invoke the <first skill> skill, which defines your role[, and the <next skill> skill]...` It is passed with `--append-system-prompt` both when starting and when resuming.
+- The stand-up message, sent only when a new conversation starts (a resumed one carries on without it), is `Stand up: load your role's instructions as your system prompt says, confirm your role in one or two lines, then wait for instructions. Do not start any work yet.`
 
 The terminals are transient: a window reload ends them, and the stand-up on open resumes their conversations. To start a role afresh, rename its old conversation with `/rename`.
 
