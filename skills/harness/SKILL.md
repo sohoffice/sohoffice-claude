@@ -9,6 +9,7 @@ description: Duties of the harness session, which maintains skills, CLAUDE.md fi
 
 - [Scope](#scope)
 - [Agent sessions](#agent-sessions)
+- [Subagent roles](#subagent-roles)
 - [Broadcast on every update](#broadcast-on-every-update)
 - [Choosing the recipients](#choosing-the-recipients)
 - [Message content](#message-content)
@@ -23,7 +24,7 @@ The harness session owns the configuration that shapes other sessions' behaviour
 | Level | Artefacts | Affects |
 | :--- | :--- | :--- |
 | Global | `~/.claude/CLAUDE.md`, `~/.claude/skills/`, `~/.claude/settings.json`, global hooks | All sessions |
-| Project | `<project>/.claude/skills/`, `<project>/CLAUDE.md`, `<project>/.claude/settings*.json`, `<project>/.claude/sessions.json`, project hooks | Sessions of that project |
+| Project | `<project>/.claude/skills/`, `<project>/CLAUDE.md`, `<project>/.claude/settings*.json`, `<project>/.claude/sessions.json`, `<project>/.claude/agents/`, project hooks | Sessions of that project |
 
 Global skills are version controlled in `~/workspaces/sohoffice-claude/skills/`, a public repository. Edit them there, commit, then run `just deploy-skills` in that repository to copy them to `~/.claude/skills/`; never edit the deployed copies: the next deploy stops on them, and the daily check reports them (`just check-skills` shows the changes). Skills there that the repository does not hold (such as `synced/`) are not ours to manage. Keep project specifics (Slack IDs, GitHub App names, project names) out of global skills: they belong in each project's instructions.
 
@@ -53,6 +54,19 @@ A project that runs one session per role declares them in `<project>/.claude/ses
 - **Order.** The file's order is the order the extension lists and starts the sessions in; put the role the human talks to first, such as the orchestrator.
 - **Keep it in step.** Adding, renaming or removing a role or its skill updates `sessions.json` in the same change. It is a project artefact: broadcast the change like any other.
 - **One way to start sessions.** If the project also starts sessions some other way, such as VS Code tasks in `.vscode/tasks.json` run on folder open, remove that in the same change, or every session starts twice.
+
+## Subagent roles
+
+A role can run as a subagent of the session the human talks to, usually the orchestrator, instead of as its own session. A subagent shares its parent's process and MCP connections, so each role moved saves a whole session's memory, its own MCP servers included.
+
+- **Which roles.** Roles whose work comes in separate pieces that each end with a report, such as requirements, design, testing or review. Keep a role as a session when its work runs for hours, keeps a server or emulator running, or uses the browser heavily; subagents share the parent's browser. The human decides which roles move.
+- **Project definitions.** Each role is a file in `<project>/.claude/agents/<role>.md`, never in `~/.claude/agents/`: roles, their skills and their tools differ between projects, and a global definition would be offered in every project. A role's frontmatter preloads its skills with `skills:`; the preloaded content omits each skill's frontmatter.
+- **What the definition says.** The role, and the skill that holds its ownership and change flow. Do only what the brief asks, in the working tree it names; edit only the role's own files; never commit, push or open a PR, since the session owning the branch commits. Messages to the human or other roles go into a final report, in a set shape, for the parent to pass on: a subagent cannot ask the human, and other sessions cannot message it.
+- **Apps that must be running.** An MCP server that an app serves only while it runs, such as a design tool on a local port, goes inline in the definition's `mcpServers:` (the `.mcp.json` schema, keyed by name). It then connects when the subagent starts, not when the parent did. Add a check as the subagent's first step, and in the parent before spawning it: if the app does not answer, stop and ask the human to open it.
+- **Project rules.** The project's way of working says who spawns each role and resumes it with SendMessage to its agent ID, that messages to and from it go through the parent, and that two browser-using subagents never run at once. A merge after the human's approval is run by the session that holds the approval in its own conversation, usually the parent, since an auto-mode permission check in another session cannot see it.
+- **Keep it in step.** The same change removes the role from `sessions.json` and from every "message the <role> session" in the project's skills and `CLAUDE.md`.
+- **Test before merging.** Definitions load only when a session starts, so a running session cannot spawn a new or changed one. Test it on the branch with a fresh `claude -p` that spawns the role with a check-only brief, for example to report its preloaded skills or its MCP tools.
+- **Rolling out.** After the merge, the parent session restarts to load the definitions. Each retired role session first hands its work in progress to the parent, leaving its changes in the working tree, and only then does the human close it.
 
 ## Broadcast on every update
 
