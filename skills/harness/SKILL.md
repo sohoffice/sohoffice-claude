@@ -66,7 +66,7 @@ A role can run as a subagent of the session the human talks to, usually the orch
 - **Project rules.** The project's way of working says who spawns each role and resumes it with SendMessage to its agent ID, that messages to and from it go through the parent, and that two browser-using subagents never run at once. A merge after the human's approval is run by the session that holds the approval in its own conversation, usually the parent, since an auto-mode permission check in another session cannot see it.
 - **Keep it in step.** The same change removes the role from `sessions.json` and from every "message the <role> session" in the project's skills and `CLAUDE.md`.
 - **Test before merging.** Definitions load only when a session starts, so a running session cannot spawn a new or changed one. Test it on the branch with a fresh `claude -p` that spawns the role with a check-only brief, for example to report its preloaded skills or its MCP tools.
-- **Rolling out.** After the merge, the parent session restarts to load the definitions. Each retired role session first hands its work in progress to the parent, leaving its changes in the working tree, and only then does the human close it.
+- **Rolling out.** After the merge, the parent session restarts to load the definitions. They load from the parent's working tree, so a branch checked out there that was cut before the merge needs the default branch merged into it first. Each retired role session first hands its work in progress to the parent, leaving its changes in the working tree, and only then does the human close it.
 
 ## Broadcast on every update
 
