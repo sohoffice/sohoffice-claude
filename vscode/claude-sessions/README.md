@@ -69,7 +69,7 @@ cd vscode/claude-sessions
 npm install
 npm run compile
 npm run package
-code --install-extension claude-sessions-0.1.0.vsix
+code --install-extension claude-sessions-*.vsix
 ```
 
 Then run **Developer: Reload Window**.
