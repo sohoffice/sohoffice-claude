@@ -18,7 +18,7 @@ A side view listing the Claude Code sessions of the current workspace's project,
 | hollow circle | idle |
 | slashed circle | not running: a session task in `.vscode/tasks.json` with no live session |
 
-Sessions are grouped under a row per project, named after the folder holding its git repository; click it to collapse the group. Within a project, a session declared with a `parent` is indented under that session. A prefix shared by the group's session names (cut at a word boundary, such as `myapp` in `myapp developer`) is dropped from each row; the tooltip keeps the full name.
+Sessions are grouped under a row per project, named after the folder holding its git repository. Within a project, a session declared with a `parent` is indented under that session. The chevron on the left of a project or of a session with sessions under it collapses and expands them; the view remembers what is collapsed. The status indicator sits against the right border. A prefix shared by the group's session names (cut at a word boundary, such as `myapp` in `myapp developer`) is dropped from each row; the tooltip keeps the full name.
 
 Under each session, in dimmed type, a detail line says what it is doing:
 

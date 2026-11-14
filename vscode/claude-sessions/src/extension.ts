@@ -16,6 +16,8 @@ interface Row {
   // The project the row is grouped under, and its depth below the project row (0 for a top-level session).
   project: string;
   depth: number;
+  // The label of the row this one is shown under, if any.
+  treeParent?: string;
 }
 
 // A project group: its rows in tree order, and the session-name prefix its rows drop.
@@ -174,11 +176,11 @@ function inTreeOrder(rows: Row[], parentOf: Map<string, string>): Row[] {
   };
   const out: Row[] = [];
   const seen = new Set<string>();
-  const visit = (r: Row, depth: number) => {
+  const visit = (r: Row, depth: number, treeParent?: string) => {
     if (seen.has(r.label)) return; // A parent cycle: show each row once.
     seen.add(r.label);
-    out.push({ ...r, depth });
-    for (const c of rows) if (parent(c) === r.label) visit(c, depth + 1);
+    out.push({ ...r, depth, treeParent });
+    for (const c of rows) if (parent(c) === r.label) visit(c, depth + 1, r.label);
   };
   for (const r of rows) if (!parent(r)) visit(r, 0);
   for (const r of rows) visit(r, 0); // Rows only reachable through a cycle.
@@ -319,6 +321,7 @@ class SessionsProvider implements vscode.WebviewViewProvider {
           label: r.label,
           project: g.project,
           depth: r.depth,
+          parent: r.treeParent,
           name: withoutPrefix(r.label, g.prefix),
           status: r.status,
           ...detailFor(r),
@@ -380,13 +383,15 @@ function pageHtml(): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <style>
   body { padding: 0; margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
-  .row { display: grid; grid-template-columns: 16px 1fr auto; column-gap: 6px; padding: 3px 12px 3px 20px; cursor: pointer; }
-  .group { font-weight: 600; padding-left: 4px; }
-  .chevron { width: 16px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.8em; }
+  /* Chevron on the left, then the name, the actions badge, and the status indicator against the right border. */
+  .row { display: grid; grid-template-columns: 16px 1fr auto 16px; column-gap: 6px; padding: 3px 12px 3px 4px; cursor: pointer; }
+  .group { font-weight: 600; }
+  .chevron { width: 16px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.7em; color: var(--vscode-icon-foreground); }
+  .chevron.toggle:hover { background: var(--vscode-toolbar-hoverBackground); border-radius: 3px; }
   .row:hover { background: var(--vscode-list-hoverBackground); }
   .icon { width: 16px; height: 22px; display: flex; align-items: center; justify-content: center; }
   .name { line-height: 22px; overflow-wrap: anywhere; }
-  .detail { grid-column: 2 / 4; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; line-height: 1.4; padding-bottom: 4px; }
+  .detail { grid-column: 2 / 5; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; line-height: 1.4; padding-bottom: 4px; }
   .detail.tool { font-size: 0.9em; opacity: 0.8; }
   .detail.tool::before { content: '⚙ '; }
   .badge { align-self: center; font-size: 0.85em; padding: 0 6px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); white-space: nowrap; }
@@ -405,47 +410,64 @@ function pageHtml(): string {
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const list = document.getElementById('list');
-  // Collapsed project groups, kept across re-renders and reloads.
+  // Collapsed projects ("p:<project>") and sessions ("s:<label>"), kept across re-renders and reloads.
   const collapsed = new Set((vscode.getState() || {}).collapsed || []);
   let last = [];
+  const toggle = key => {
+    if (collapsed.has(key)) collapsed.delete(key); else collapsed.add(key);
+    vscode.setState({ collapsed: [...collapsed] });
+    render(last);
+  };
+  // A chevron that toggles the key, or an empty slot of the same width for a row with nothing under it.
+  const chevron = key => {
+    const c = document.createElement('span');
+    c.className = 'chevron';
+    if (key) {
+      c.classList.add('toggle');
+      c.textContent = collapsed.has(key) ? '▶' : '▼';
+      c.addEventListener('click', e => { e.stopPropagation(); toggle(key); });
+    }
+    return c;
+  };
   const render = rows => {
     last = rows;
-    list.replaceChildren(...rows.filter(r => r.group || !collapsed.has(r.project)).map(r => {
+    const byLabel = new Map(rows.filter(r => !r.group).map(r => [r.label, r]));
+    const parents = new Set(rows.map(r => r.parent).filter(Boolean));
+    const hidden = r => {
+      if (r.group) return false;
+      if (r.project !== undefined && collapsed.has('p:' + r.project)) return true;
+      for (let p = r.parent; p; p = byLabel.get(p)?.parent) if (collapsed.has('s:' + p)) return true;
+      return false;
+    };
+    list.replaceChildren(...rows.filter(r => !hidden(r)).map(r => {
       const row = document.createElement('div');
       row.title = r.tooltip;
       if (r.group) {
         row.className = 'row group';
-        const chevron = document.createElement('span');
-        chevron.className = 'chevron';
-        chevron.textContent = collapsed.has(r.project) ? '▶' : '▼';
         const name = document.createElement('span');
         name.className = 'name';
         name.textContent = r.name;
-        row.append(chevron, name);
-        row.addEventListener('click', () => {
-          if (collapsed.has(r.project)) collapsed.delete(r.project); else collapsed.add(r.project);
-          vscode.setState({ collapsed: [...collapsed] });
-          render(last);
-        });
+        row.append(chevron('p:' + r.project), name);
+        row.addEventListener('click', () => toggle('p:' + r.project));
         return row;
       }
       row.className = 'row';
-      row.style.paddingLeft = (20 + 16 * (r.depth || 0)) + 'px';
-      const icon = document.createElement('span');
-      icon.className = 'icon';
-      const dot = document.createElement('span');
-      dot.className = 'dot ' + r.status;
-      icon.append(dot);
+      row.style.paddingLeft = (4 + 16 * ((r.depth || 0) + (r.project !== undefined ? 1 : 0))) + 'px';
       const name = document.createElement('span');
       name.className = 'name' + (r.status === 'stopped' ? ' stopped-name' : '');
       name.textContent = r.name;
-      row.append(icon, name);
       const badge = document.createElement('span');
       if (r.badge) {
         badge.className = 'badge';
         badge.textContent = r.badge;
       }
-      row.append(badge);
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.title = r.status;
+      const dot = document.createElement('span');
+      dot.className = 'dot ' + r.status;
+      icon.append(dot);
+      row.append(chevron(parents.has(r.label) ? 's:' + r.label : undefined), name, badge, icon);
       if (r.detail) {
         const detail = document.createElement('div');
         detail.className = 'detail ' + r.detailKind;
