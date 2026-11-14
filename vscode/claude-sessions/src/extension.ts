@@ -452,6 +452,9 @@ function pageHtml(): string {
     }
     return c;
   };
+  // The more prominent of two statuses: needing input first, then working, then idle, then not running.
+  const RANK = ['waiting', 'busy', 'idle', 'stopped'];
+  const rank = s => { const i = RANK.indexOf(s); return i < 0 ? RANK.length : i; };
   const render = rows => {
     last = rows;
     const byLabel = new Map(rows.filter(r => !r.group).map(r => [r.label, r]));
@@ -484,11 +487,20 @@ function pageHtml(): string {
         badge.className = 'badge';
         badge.textContent = r.badge;
       }
+      // A collapsed session shows the most prominent status among itself and every session under it.
+      let status = r.status;
+      if (collapsed.has('s:' + r.label)) {
+        const under = rows.filter(c => {
+          for (let p = c.parent; p; p = byLabel.get(p)?.parent) if (p === r.label) return true;
+          return false;
+        });
+        for (const c of under) if (rank(c.status) < rank(status)) status = c.status;
+      }
       const icon = document.createElement('span');
       icon.className = 'icon';
-      icon.title = r.status;
+      icon.title = status === r.status ? r.status : r.status + '; under it: ' + status;
       const dot = document.createElement('span');
-      dot.className = 'dot ' + r.status;
+      dot.className = 'dot ' + status;
       icon.append(dot);
       row.append(chevron(parents.has(r.label) ? 's:' + r.label : undefined), name, badge, icon);
       if (r.detail) {
