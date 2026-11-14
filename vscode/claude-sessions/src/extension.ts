@@ -3,16 +3,16 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { Summary, sessionSummary } from './summary';
+import { Activity, DEFAULT_MARKER, sessionActivity } from './summary';
 import { Manifest, SessionSpec, claudeArgs, latestSessionId, readManifest, sessionName } from './standup';
 
 // One row in the view: a live Claude session, or a declared session (sessions.json or tasks.json) that is not running,
-// with the executive summary of its latest reply, if any.
+// with what it is doing while busy, or the executive summary of its latest reply.
 interface Row {
   label: string;
   status: 'busy' | 'waiting' | 'idle' | 'stopped' | string;
   cwd?: string;
-  summary?: Summary;
+  activity?: Activity;
 }
 
 interface Agent {
@@ -209,7 +209,7 @@ class SessionsProvider implements vscode.WebviewViewProvider {
           label: a.name ?? `unnamed ${(a.sessionId ?? '').slice(0, 8)}`,
           status: normalizeStatus(a),
           cwd: a.cwd,
-          summary: a.sessionId ? safeSummary(a.sessionId, a.cwd) : undefined,
+          activity: a.sessionId ? safeActivity(a.sessionId, a.cwd) : undefined,
         });
       }
 
@@ -258,26 +258,53 @@ class SessionsProvider implements vscode.WebviewViewProvider {
         label: r.label,
         name: withoutPrefix(r.label, this.prefix),
         status: r.status,
-        summary: r.summary?.text,
+        ...detailFor(r),
         tooltip: tooltipFor(r),
       }));
     void this.view.webview.postMessage({ type: 'rows', rows });
   }
 }
 
-// A transcript that cannot be read only costs the summary, never the row.
-function safeSummary(sessionId: string, cwd: string): Summary | undefined {
+// A transcript that cannot be read only costs the detail line, never the row.
+function safeActivity(sessionId: string, cwd: string): Activity | undefined {
   try {
-    return sessionSummary(sessionId, cwd);
+    const marker = vscode.workspace.getConfiguration('claudeSessions').get<string>('phaseMarker', DEFAULT_MARKER).trim();
+    return sessionActivity(sessionId, cwd, marker || DEFAULT_MARKER);
   } catch {
     return undefined;
   }
 }
 
+// Time since a phase started, e.g. "45s", "4m", "1h 5m".
+function elapsed(since: number): string {
+  const s = Math.max(0, Math.round((Date.now() - since) / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+// The row's detail line. Busy: the latest phase line with its elapsed time, else the latest tool call.
+// Otherwise: the summary's first sentence, with the number of actions as a badge.
+function detailFor(row: Row): { detail?: string; detailKind?: string; badge?: string } {
+  const a = row.activity;
+  if (!a) return {};
+  if (row.status === 'busy') {
+    if (a.phase) return { detail: a.phaseAt ? `${a.phase} · ${elapsed(a.phaseAt)}` : a.phase, detailKind: 'phase' };
+    if (a.tool) return { detail: a.tool, detailKind: 'tool' };
+    return {};
+  }
+  const s = a.summary;
+  if (!s) return {};
+  const n = s.actions.length;
+  const badge = n ? (s.chinese ? `${n} 項待辦` : `${n} action${n > 1 ? 's' : ''}`) : undefined;
+  return { detail: s.headline, detailKind: 'summary', badge };
+}
+
 // Plain text for the row's title attribute: name, status and folder, then the whole summary, actions included.
 function tooltipFor(row: Row): string {
   const head = row.cwd ? `${row.label} · ${row.status} · ${row.cwd}` : `${row.label} · not running`;
-  return row.summary ? `${head}\n\n${row.summary.markdown.replace(/\*\*|__|`/g, '')}` : head;
+  const s = row.activity?.summary;
+  return s && row.status !== 'busy' ? `${head}\n\n${s.markdown.replace(/\*\*|__|`/g, '')}` : head;
 }
 
 function pageHtml(): string {
@@ -289,11 +316,14 @@ function pageHtml(): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <style>
   body { padding: 0; margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
-  .row { display: grid; grid-template-columns: 16px 1fr; column-gap: 6px; padding: 3px 12px 3px 20px; cursor: pointer; }
+  .row { display: grid; grid-template-columns: 16px 1fr auto; column-gap: 6px; padding: 3px 12px 3px 20px; cursor: pointer; }
   .row:hover { background: var(--vscode-list-hoverBackground); }
   .icon { width: 16px; height: 22px; display: flex; align-items: center; justify-content: center; }
   .name { line-height: 22px; overflow-wrap: anywhere; }
-  .summary { grid-column: 2; color: var(--vscode-descriptionForeground); white-space: pre-line; overflow-wrap: anywhere; line-height: 1.4; padding-bottom: 4px; }
+  .detail { grid-column: 2 / 4; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; line-height: 1.4; padding-bottom: 4px; }
+  .detail.tool { font-size: 0.9em; opacity: 0.8; }
+  .detail.tool::before { content: '⚙ '; }
+  .badge { align-self: center; font-size: 0.85em; padding: 0 6px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); white-space: nowrap; }
   .dot { width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; }
   .idle { border: 1.5px solid var(--vscode-foreground); }
   .waiting { background: var(--vscode-charts-yellow); }
@@ -324,11 +354,17 @@ function pageHtml(): string {
       name.className = 'name' + (r.status === 'stopped' ? ' stopped-name' : '');
       name.textContent = r.name;
       row.append(icon, name);
-      if (r.summary) {
-        const summary = document.createElement('div');
-        summary.className = 'summary';
-        summary.textContent = r.summary;
-        row.append(summary);
+      const badge = document.createElement('span');
+      if (r.badge) {
+        badge.className = 'badge';
+        badge.textContent = r.badge;
+      }
+      row.append(badge);
+      if (r.detail) {
+        const detail = document.createElement('div');
+        detail.className = 'detail ' + r.detailKind;
+        detail.textContent = r.detail;
+        row.append(detail);
       }
       if (r.status !== 'error') row.addEventListener('click', () => vscode.postMessage({ type: 'open', label: r.label }));
       return row;

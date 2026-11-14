@@ -1,7 +1,7 @@
 {
   "name": "claude-sessions",
   "displayName": "Claude Sessions",
-  "description": "Side view of the Claude Code sessions of the current project, with their status and latest executive summary; stands up the sessions declared in .claude/sessions.json.",
+  "description": "Side view of the Claude Code sessions of the current project, with their status, the phase each busy session is in, and the headline of its latest executive summary; stands up the sessions declared in .claude/sessions.json.",
   "version": "0.1.0",
   "publisher": "sohoffice",
   "license": "UNLICENSED",
@@ -97,6 +97,11 @@
           "type": "boolean",
           "default": true,
           "description": "Stand up the sessions declared in .claude/sessions.json when the folder opens, resuming each one's latest conversation."
+        },
+        "claudeSessions.phaseMarker": {
+          "type": "string",
+          "default": "▸",
+          "description": "The text that starts a phase line in a session's reply. Keep it the same as the marker your CLAUDE.md asks sessions to write."
         },
         "claudeSessions.terminalLocation": {
           "type": "string",

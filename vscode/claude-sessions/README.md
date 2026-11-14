@@ -20,7 +20,12 @@ A side view listing the Claude Code sessions of the current workspace's project,
 
 A prefix shared by all session names (cut at a word boundary, such as `myapp` in `myapp developer`) is dropped from each row and shown next to the view title; the tooltip keeps the full name.
 
-When a session's latest reply ends with an executive summary (a heading `Executive summary` or `執行摘要`), its text is shown in full under the session in dimmed type, wrapped to the view's width and aligned with the session name, and the whole summary, actions included, shows in the tooltip. Nothing is shown once the owner has written again, or while the reply has no summary. The summary is read from the session transcript in `~/.claude/projects/`, an internal format that may change between Claude Code versions.
+Under each session, in dimmed type, a detail line says what it is doing:
+
+- **Busy:** the latest phase line the session wrote in this turn, with the time since, such as `Reading the extension source · 4m`. A phase line is a line of the reply that starts with the phase marker (`▸` by default, setting `claudeSessions.phaseMarker`) and a space, outside code fences; the global `CLAUDE.md` asks sessions to write one when a turn moves to a new phase, so the two must name the same marker. Until the turn has one, the latest tool call is shown instead, smaller and marked `⚙`: its own description (Bash, Agent), else the file or the tool name.
+- **Idle or needs input:** the first sentence of the executive summary the latest reply ended with (a heading `Executive summary` or `執行摘要`), with the number of actions under `Actions required from you` (or `需要你處理的事項`) as a badge. The whole summary, actions included, shows in the tooltip. Nothing is shown when the reply has no summary.
+
+Skill text and other context injected into the transcript does not count as the owner writing, so it does not start a new turn. Everything is read from the session transcript in `~/.claude/projects/`, an internal format that may change between Claude Code versions.
 
 Click a session to jump to its terminal. Clicking a declared session that is not running starts it; a session task from `.vscode/tasks.json` that is not running offers to start its task.
 
@@ -77,6 +82,7 @@ Then run **Developer: Reload Window**.
 | `claudeSessions.refreshSeconds` | `3` | Refresh interval |
 | `claudeSessions.allProjects` | `false` | Show sessions of every project |
 | `claudeSessions.standUpOnOpen` | `true` | Stand up the declared sessions when the folder opens |
+| `claudeSessions.phaseMarker` | `▸` | The text that starts a phase line; keep it the same as the marker `CLAUDE.md` asks for |
 | `claudeSessions.terminalLocation` | `editor` | Where session terminals open: `editor` or `panel` |
 
 ## How it works
@@ -84,8 +90,8 @@ Then run **Developer: Reload Window**.
 - Sessions and status come from `claude agents --json`; a listed session whose process has ended is dropped.
 - A project is a git repository, worktrees included (`git rev-parse --git-common-dir`), or else the folder. A session belongs to the workspace when its `cwd` is in the same project.
 - Order follows the session terminals' tabs in the editor area, left to right; then `.claude/sessions.json`; then the tasks in `.vscode/tasks.json` that pass `--name` to `claude` or run a `claude-session.sh` wrapper; then the name. Moving a tab reorders the view at once.
-- The view is a webview, so the summaries can wrap; a tree view cuts each row to one line.
-- Summaries come from the tail of `~/.claude/projects/<cwd>/<sessionId>.jsonl`, re-read only when the file changes.
+- The view is a webview, so the detail lines can wrap; a tree view cuts each row to one line.
+- Detail lines come from the tail of `~/.claude/projects/<cwd>/<sessionId>.jsonl`, re-read only when the file changes; the elapsed time is recomputed on each refresh.
 - Clicking finds the terminal named after the session (task terminals take the task label) and shows it. Sessions started outside this VS Code window have no terminal here.
 
 ## Develop
