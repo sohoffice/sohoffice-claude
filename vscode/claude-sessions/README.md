@@ -92,6 +92,7 @@ Then run **Developer: Reload Window**.
 - A project is a git repository, worktrees included (`git rev-parse --git-common-dir`), or else the folder. A session belongs to the workspace when its `cwd` is in the same project.
 - Projects come in workspace folder order, then by name. Within a project, siblings follow the session terminals' tabs in the editor area, left to right; then `.claude/sessions.json`; then the tasks in `.vscode/tasks.json` that pass `--name` to `claude` or run a `claude-session.sh` wrapper; then the name. Moving a tab reorders the view at once.
 - Sessions not declared in `sessions.json`, such as a ticket session, are top-level in their project.
+- With `claudeSessions.allProjects`, a project outside the workspace takes its hierarchy and order from the `.claude/sessions.json` in its repository (the main checkout, for a worktree). Only its running sessions are shown; its declared sessions that are not running are not.
 - The view is a webview, so the detail lines can wrap; a tree view cuts each row to one line.
 - Detail lines come from the tail of `~/.claude/projects/<cwd>/<sessionId>.jsonl`, re-read only when the file changes; the elapsed time is recomputed on each refresh.
 - Clicking finds the terminal named after the session (task terminals take the task label) and shows it. Sessions started outside this VS Code window have no terminal here.

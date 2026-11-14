@@ -160,6 +160,12 @@ function sessionTaskLabels(): string[] {
 
 const SEPARATOR = /[\s\-_:/.]/;
 
+// The folder holding a directory's git repository (the main checkout, for a worktree), or the directory itself.
+async function projectRoot(dir: string): Promise<string> {
+  const project = await projectOf(dir);
+  return path.basename(project) === '.git' ? path.dirname(project) : project;
+}
+
 // A project's name for its group row: the folder holding the git repository (worktrees included), or the folder itself.
 async function projectLabel(dir: string): Promise<string> {
   const project = await projectOf(dir);
@@ -256,8 +262,23 @@ class SessionsProvider implements vscode.WebviewViewProvider {
 
       const declared = declaredSessions();
       const parentOf = new Map<string, string>();
-      for (const d of declared) {
-        if (d.spec.parent) parentOf.set(d.name, sessionName(d.manifest, { ...d.spec, role: d.spec.parent }));
+      // Other projects' sessions (allProjects) take their parents and order from their own repository's sessions.json.
+      const others: Manifest[] = [];
+      const folderRoots = new Set(await Promise.all((vscode.workspace.workspaceFolders ?? []).map(f => projectRoot(f.uri.fsPath))));
+      for (const root of new Set(await Promise.all(live.map(r => projectRoot(r.cwd!))))) {
+        if (folderRoots.has(root)) continue;
+        try {
+          const m = readManifest(root);
+          if (m) others.push(m);
+        } catch {
+          // An unreadable sessions.json in another project only costs its hierarchy.
+        }
+      }
+      const otherOrder = others.flatMap(m => m.sessions.map(spec => sessionName(m, spec)));
+      for (const m of [...new Set(declared.map(d => d.manifest)), ...others]) {
+        for (const spec of m.sessions) {
+          if (spec.parent) parentOf.set(sessionName(m, spec), sessionName(m, { ...spec, role: spec.parent }));
+        }
       }
       const order = [...declared.map(d => d.name), ...sessionTaskLabels()];
       const tabs = terminalTabLabels();
@@ -273,7 +294,9 @@ class SessionsProvider implements vscode.WebviewViewProvider {
         const tab = tabs.findIndex(t => t === r.label || t.endsWith(r.label));
         if (tab >= 0) return tab;
         const task = order.indexOf(r.label);
-        return task >= 0 ? 1000 + task : 9999;
+        if (task >= 0) return 1000 + task;
+        const other = otherOrder.indexOf(r.label);
+        return other >= 0 ? 5000 + other : 9999;
       };
       const sorted = [...live, ...stopped].sort((x, y) => rank(x) - rank(y) || x.label.localeCompare(y.label));
       // One group per project: the workspace folders' projects first, in folder order, then the others by name.
