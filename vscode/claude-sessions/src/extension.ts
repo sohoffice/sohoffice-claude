@@ -557,12 +557,53 @@ async function standUp(): Promise<number> {
   return started;
 }
 
+// Asking another VS Code window to show a session's terminal: each window watches this file and shows the terminal
+// if it has it. A request older than FOCUS_TTL_MS is ignored, so a window opened later does not act on it.
+const FOCUS_DIR = path.join(os.homedir(), '.claude', 'claude-sessions');
+const FOCUS_FILE = path.join(FOCUS_DIR, 'focus.json');
+const FOCUS_TTL_MS = 15000;
+
+function requestFocus(label: string): void {
+  fs.mkdirSync(FOCUS_DIR, { recursive: true });
+  fs.writeFileSync(FOCUS_FILE, JSON.stringify({ label, at: Date.now() }));
+}
+
+function watchFocusRequests(): vscode.Disposable {
+  fs.mkdirSync(FOCUS_DIR, { recursive: true });
+  let handled = 0;
+  const check = () => {
+    try {
+      const req = JSON.parse(fs.readFileSync(FOCUS_FILE, 'utf8')) as { label?: string; at?: number };
+      if (!req.label || !req.at || req.at <= handled || Date.now() - req.at > FOCUS_TTL_MS) return;
+      const terminal = findTerminal(req.label);
+      if (!terminal) return;
+      handled = req.at;
+      terminal.show(false);
+    } catch {
+      // No request yet, or one being written: the next change event reads it.
+    }
+  };
+  const watcher = fs.watch(FOCUS_DIR, () => check());
+  return { dispose: () => watcher.close() };
+}
+
 async function open(row: Row): Promise<void> {
   if (row.status === 'error') return;
   const terminal = findTerminal(row.label);
   if (terminal) {
     terminal.show(false);
     return;
+  }
+  // A session of a project this window does not hold: switch to the window that has the project open (VS Code
+  // focuses it rather than opening the folder twice), and ask that window to show the session's terminal.
+  if (row.cwd) {
+    const root = await projectRoot(row.cwd);
+    const folderRoots = await Promise.all((vscode.workspace.workspaceFolders ?? []).map(f => projectRoot(f.uri.fsPath)));
+    if (!folderRoots.includes(root)) {
+      requestFocus(row.label);
+      await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(root), { forceNewWindow: true });
+      return;
+    }
   }
   const declared = declaredSessions().find(d => d.name === row.label);
   if (declared) {
@@ -587,6 +628,7 @@ async function open(row: Row): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new SessionsProvider();
+  context.subscriptions.push(watchFocusRequests());
 
   const updateBadge = () => {
     const view = provider.view;

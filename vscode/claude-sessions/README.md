@@ -27,7 +27,7 @@ Under each session, in dimmed type, a detail line says what it is doing:
 
 Skill text and other context injected into the transcript does not count as the owner writing, so it does not start a new turn. Everything is read from the session transcript in `~/.claude/projects/`, an internal format that may change between Claude Code versions.
 
-Click a session to jump to its terminal. Clicking a declared session that is not running starts it; a session task from `.vscode/tasks.json` that is not running offers to start its task.
+Click a session to jump to its terminal. Clicking a session of another project (with `claudeSessions.allProjects`) switches to the VS Code window that has that project open, and that window shows the session's terminal; this needs the extension in that window too. A session started outside VS Code has no terminal to show, so only the window switches. Clicking a declared session that is not running starts it; a session task from `.vscode/tasks.json` that is not running offers to start its task.
 
 Drag the view's icon from the Activity Bar to the Secondary Side Bar to dock it on the right.
 
@@ -96,6 +96,7 @@ Then run **Developer: Reload Window**.
 - The view is a webview, so the detail lines can wrap; a tree view cuts each row to one line.
 - Detail lines come from the tail of `~/.claude/projects/<cwd>/<sessionId>.jsonl`, re-read only when the file changes; the elapsed time is recomputed on each refresh.
 - Clicking finds the terminal named after the session (task terminals take the task label) and shows it. Sessions started outside this VS Code window have no terminal here.
+- For another project's session, the click writes `{label, at}` to `~/.claude/claude-sessions/focus.json` and runs `vscode.openFolder` on the project's repository root, which focuses the window already holding it. Every window watches that file and shows the terminal if it has it; a request older than 15 seconds is ignored.
 
 ## Develop
 

@@ -2,7 +2,7 @@
   "name": "claude-sessions",
   "displayName": "Claude Sessions",
   "description": "Side view of the Claude Code sessions of the current project, with their status, the phase each busy session is in, and the headline of its latest executive summary; stands up the sessions declared in .claude/sessions.json.",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "publisher": "sohoffice",
   "license": "UNLICENSED",
   "repository": {
