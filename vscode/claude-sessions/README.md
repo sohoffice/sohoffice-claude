@@ -18,7 +18,7 @@ A side view listing the Claude Code sessions of the current workspace's project,
 | hollow circle | idle |
 | slashed circle | not running: a session task in `.vscode/tasks.json` with no live session |
 
-A prefix shared by all session names (cut at a word boundary, such as `myapp` in `myapp developer`) is dropped from each row and shown next to the view title; the tooltip keeps the full name.
+Sessions are grouped under a row per project, named after the folder holding its git repository; click it to collapse the group. Within a project, a session declared with a `parent` is indented under that session. A prefix shared by the group's session names (cut at a word boundary, such as `myapp` in `myapp developer`) is dropped from each row; the tooltip keeps the full name.
 
 Under each session, in dimmed type, a detail line says what it is doing:
 
@@ -40,7 +40,7 @@ Put the project's agent sessions in `.claude/sessions.json` at the workspace fol
   "project": "myapp",
   "sessions": [
     { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true },
-    { "role": "UI developer", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
+    { "role": "UI developer", "parent": "orchestrator", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
   ]
 }
 ```
@@ -52,6 +52,7 @@ Put the project's agent sessions in `.claude/sessions.json` at the workspace fol
 | `sessions[].skills` | Skills the session invokes, in order; the first defines the role. `"skill": "<name>"` is accepted for a single skill |
 | `sessions[].description` | Optional words on the role, added to the system prompt after the project, such as `owning the back end` |
 | `sessions[].remoteControl` | Start the session with Remote Control (`--remote-control <name>`), to drive it from claude.ai/code or the Claude app |
+| `sessions[].parent` | Optional role of the session this one works under; the view indents it below that session. A session whose parent is not shown is top-level |
 
 When the folder opens, and with **Claude Sessions: Stand Up All Sessions** (the play button on the view), each declared session that has no terminal in this window and no live process elsewhere starts in its own terminal, named after the session:
 
@@ -89,7 +90,8 @@ Then run **Developer: Reload Window**.
 
 - Sessions and status come from `claude agents --json`; a listed session whose process has ended is dropped.
 - A project is a git repository, worktrees included (`git rev-parse --git-common-dir`), or else the folder. A session belongs to the workspace when its `cwd` is in the same project.
-- Order follows the session terminals' tabs in the editor area, left to right; then `.claude/sessions.json`; then the tasks in `.vscode/tasks.json` that pass `--name` to `claude` or run a `claude-session.sh` wrapper; then the name. Moving a tab reorders the view at once.
+- Projects come in workspace folder order, then by name. Within a project, siblings follow the session terminals' tabs in the editor area, left to right; then `.claude/sessions.json`; then the tasks in `.vscode/tasks.json` that pass `--name` to `claude` or run a `claude-session.sh` wrapper; then the name. Moving a tab reorders the view at once.
+- Sessions not declared in `sessions.json`, such as a ticket session, are top-level in their project.
 - The view is a webview, so the detail lines can wrap; a tree view cuts each row to one line.
 - Detail lines come from the tail of `~/.claude/projects/<cwd>/<sessionId>.jsonl`, re-read only when the file changes; the elapsed time is recomputed on each refresh.
 - Clicking finds the terminal named after the session (task terminals take the task label) and shows it. Sessions started outside this VS Code window have no terminal here.

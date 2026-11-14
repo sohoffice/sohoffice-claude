@@ -7,9 +7,10 @@ import * as path from 'path';
 //   "project": "myapp",
 //   "sessions": [
 //     { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true },
-//     { "role": "UI developer", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
+//     { "role": "UI developer", "parent": "orchestrator", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
 //   ]
 // }
+// "parent" names the role of the session this one works under; the view shows it indented below that session.
 // The session name is "<project> <role>"; the system prompt and stand-up message come from the templates below.
 // "skill": "<name>" is accepted for a single skill.
 export interface SessionSpec {
@@ -17,6 +18,7 @@ export interface SessionSpec {
   skills: string[];
   description?: string;
   remoteControl?: boolean;
+  parent?: string;
 }
 
 interface RawSpec {
@@ -25,6 +27,7 @@ interface RawSpec {
   skills?: string[];
   description?: string;
   remoteControl?: boolean;
+  parent?: string;
 }
 
 export interface Manifest {
@@ -48,7 +51,7 @@ export function readManifest(folder: string): Manifest | undefined {
     const skills = (s?.skills ?? (s?.skill ? [s.skill] : [])).filter(Boolean);
     // A session with no role or no skill cannot be named or told its role: skip it.
     if (!s?.role || !skills.length) continue;
-    sessions.push({ role: s.role, skills, description: s.description, remoteControl: s.remoteControl });
+    sessions.push({ role: s.role, skills, description: s.description, remoteControl: s.remoteControl, parent: s.parent });
   }
   return { project, sessions };
 }

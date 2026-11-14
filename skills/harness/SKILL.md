@@ -37,7 +37,7 @@ A project that runs one session per role declares them in `<project>/.claude/ses
   "project": "myapp",
   "sessions": [
     { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true },
-    { "role": "UI developer", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
+    { "role": "UI developer", "parent": "orchestrator", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
   ]
 }
 ```
@@ -49,8 +49,10 @@ A project that runs one session per role declares them in `<project>/.claude/ses
 | `sessions[].skills` | The skills the session invokes at start and after a compaction, in order; the first defines the role. `"skill": "<name>"` is accepted for one skill |
 | `sessions[].description` | Optional words on the role for the system prompt, such as `owning the back end` |
 | `sessions[].remoteControl` | `true` to start the session with Remote Control, so the human can drive it from claude.ai/code or the Claude app |
+| `sessions[].parent` | Optional role of the session this one works under, such as `orchestrator` for a developer; the extension's view indents it below that session |
 
 - **When to create it.** When the project defines roles (a role table in its `CLAUDE.md`, or one skill per role) and the human wants the sessions stood up together. Take the roles and skills from the role table; invent none.
+- **Parents.** Set `parent` where the project's way of working says one session directs another, such as an orchestrator over its developers; leave it out for a session that works on its own, such as the harness.
 - **Order.** The file's order is the order the extension lists and starts the sessions in; put the role the human talks to first, such as the orchestrator.
 - **Keep it in step.** Adding, renaming or removing a role or its skill updates `sessions.json` in the same change. It is a project artefact: broadcast the change like any other.
 - **One way to start sessions.** If the project also starts sessions some other way, such as VS Code tasks in `.vscode/tasks.json` run on folder open, remove that in the same change, or every session starts twice.

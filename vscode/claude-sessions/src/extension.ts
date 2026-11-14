@@ -13,6 +13,16 @@ interface Row {
   status: 'busy' | 'waiting' | 'idle' | 'stopped' | string;
   cwd?: string;
   activity?: Activity;
+  // The project the row is grouped under, and its depth below the project row (0 for a top-level session).
+  project: string;
+  depth: number;
+}
+
+// A project group: its rows in tree order, and the session-name prefix its rows drop.
+interface Group {
+  project: string;
+  rows: Row[];
+  prefix: string;
 }
 
 interface Agent {
@@ -148,6 +158,33 @@ function sessionTaskLabels(): string[] {
 
 const SEPARATOR = /[\s\-_:/.]/;
 
+// A project's name for its group row: the folder holding the git repository (worktrees included), or the folder itself.
+async function projectLabel(dir: string): Promise<string> {
+  const project = await projectOf(dir);
+  return path.basename(path.basename(project) === '.git' ? path.dirname(project) : project);
+}
+
+// Put each row after its parent, indented one level more; rows whose parent is not shown are top-level.
+// Siblings keep the order they come in.
+function inTreeOrder(rows: Row[], parentOf: Map<string, string>): Row[] {
+  const labels = new Set(rows.map(r => r.label));
+  const parent = (r: Row) => {
+    const p = parentOf.get(r.label);
+    return p && p !== r.label && labels.has(p) ? p : undefined;
+  };
+  const out: Row[] = [];
+  const seen = new Set<string>();
+  const visit = (r: Row, depth: number) => {
+    if (seen.has(r.label)) return; // A parent cycle: show each row once.
+    seen.add(r.label);
+    out.push({ ...r, depth });
+    for (const c of rows) if (parent(c) === r.label) visit(c, depth + 1);
+  };
+  for (const r of rows) if (!parent(r)) visit(r, 0);
+  for (const r of rows) visit(r, 0); // Rows only reachable through a cycle.
+  return out;
+}
+
 // The prefix shared by all labels, cut at a word boundary, so it can be dropped from each row.
 // Empty when fewer than two labels, or when dropping it would leave a label empty.
 function commonPrefix(labels: string[]): string {
@@ -185,7 +222,7 @@ class SessionsProvider implements vscode.WebviewViewProvider {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
   rows: Row[] = [];
-  prefix = '';
+  groups: Group[] = [];
   error?: string;
   view?: vscode.WebviewView;
 
@@ -210,13 +247,25 @@ class SessionsProvider implements vscode.WebviewViewProvider {
           status: normalizeStatus(a),
           cwd: a.cwd,
           activity: a.sessionId ? safeActivity(a.sessionId, a.cwd) : undefined,
+          project: await projectLabel(a.cwd),
+          depth: 0,
         });
       }
 
-      const order = [...declaredSessions().map(d => d.name), ...sessionTaskLabels()];
+      const declared = declaredSessions();
+      const parentOf = new Map<string, string>();
+      for (const d of declared) {
+        if (d.spec.parent) parentOf.set(d.name, sessionName(d.manifest, { ...d.spec, role: d.spec.parent }));
+      }
+      const order = [...declared.map(d => d.name), ...sessionTaskLabels()];
       const tabs = terminalTabLabels();
       const liveLabels = new Set(live.map(r => r.label));
-      const stopped: Row[] = order.filter(l => !liveLabels.has(l)).map(label => ({ label, status: 'stopped' }));
+      const firstFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const stopped: Row[] = [];
+      for (const label of order.filter(l => !liveLabels.has(l))) {
+        const folder = declared.find(d => d.name === label)?.folder ?? firstFolder;
+        stopped.push({ label, status: 'stopped', project: folder ? await projectLabel(folder) : '', depth: 0 });
+      }
       // Terminal tabs in the editor area first, in tab order; then sessions.json and tasks.json order; then by name.
       const rank = (r: Row) => {
         const tab = tabs.findIndex(t => t === r.label || t.endsWith(r.label));
@@ -224,8 +273,18 @@ class SessionsProvider implements vscode.WebviewViewProvider {
         const task = order.indexOf(r.label);
         return task >= 0 ? 1000 + task : 9999;
       };
-      this.rows = [...live, ...stopped].sort((x, y) => rank(x) - rank(y) || x.label.localeCompare(y.label));
-      this.prefix = commonPrefix(this.rows.map(r => r.label));
+      const sorted = [...live, ...stopped].sort((x, y) => rank(x) - rank(y) || x.label.localeCompare(y.label));
+      // One group per project: the workspace folders' projects first, in folder order, then the others by name.
+      const folderProjects = await Promise.all((vscode.workspace.workspaceFolders ?? []).map(f => projectLabel(f.uri.fsPath)));
+      const projects = [...new Set(sorted.map(r => r.project))].sort((x, y) => {
+        const fx = folderProjects.indexOf(x), fy = folderProjects.indexOf(y);
+        return (fx < 0 ? 1e9 : fx) - (fy < 0 ? 1e9 : fy) || x.localeCompare(y);
+      });
+      this.groups = projects.map(project => {
+        const rows = inTreeOrder(sorted.filter(r => r.project === project), parentOf);
+        return { project, rows, prefix: commonPrefix(rows.map(r => r.label)) };
+      });
+      this.rows = this.groups.flatMap(g => g.rows);
       this.error = undefined;
     } catch (err) {
       this.error = `claude agents --json failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -253,14 +312,19 @@ class SessionsProvider implements vscode.WebviewViewProvider {
   private post(): void {
     if (!this.view) return;
     const rows = this.error
-      ? [{ label: this.error, name: this.error, status: 'error', tooltip: this.error }]
-      : this.rows.map(r => ({
-        label: r.label,
-        name: withoutPrefix(r.label, this.prefix),
-        status: r.status,
-        ...detailFor(r),
-        tooltip: tooltipFor(r),
-      }));
+      ? [{ label: this.error, name: this.error, status: 'error', tooltip: this.error, depth: 0 }]
+      : this.groups.flatMap(g => [
+        { group: true, project: g.project, name: g.project, tooltip: g.project },
+        ...g.rows.map(r => ({
+          label: r.label,
+          project: g.project,
+          depth: r.depth,
+          name: withoutPrefix(r.label, g.prefix),
+          status: r.status,
+          ...detailFor(r),
+          tooltip: tooltipFor(r),
+        })),
+      ]);
     void this.view.webview.postMessage({ type: 'rows', rows });
   }
 }
@@ -317,6 +381,8 @@ function pageHtml(): string {
 <style>
   body { padding: 0; margin: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
   .row { display: grid; grid-template-columns: 16px 1fr auto; column-gap: 6px; padding: 3px 12px 3px 20px; cursor: pointer; }
+  .group { font-weight: 600; padding-left: 4px; }
+  .chevron { width: 16px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.8em; }
   .row:hover { background: var(--vscode-list-hoverBackground); }
   .icon { width: 16px; height: 22px; display: flex; align-items: center; justify-content: center; }
   .name { line-height: 22px; overflow-wrap: anywhere; }
@@ -339,12 +405,32 @@ function pageHtml(): string {
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const list = document.getElementById('list');
-  window.addEventListener('message', e => {
-    if (e.data.type !== 'rows') return;
-    list.replaceChildren(...e.data.rows.map(r => {
+  // Collapsed project groups, kept across re-renders and reloads.
+  const collapsed = new Set((vscode.getState() || {}).collapsed || []);
+  let last = [];
+  const render = rows => {
+    last = rows;
+    list.replaceChildren(...rows.filter(r => r.group || !collapsed.has(r.project)).map(r => {
       const row = document.createElement('div');
-      row.className = 'row';
       row.title = r.tooltip;
+      if (r.group) {
+        row.className = 'row group';
+        const chevron = document.createElement('span');
+        chevron.className = 'chevron';
+        chevron.textContent = collapsed.has(r.project) ? '▶' : '▼';
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = r.name;
+        row.append(chevron, name);
+        row.addEventListener('click', () => {
+          if (collapsed.has(r.project)) collapsed.delete(r.project); else collapsed.add(r.project);
+          vscode.setState({ collapsed: [...collapsed] });
+          render(last);
+        });
+        return row;
+      }
+      row.className = 'row';
+      row.style.paddingLeft = (20 + 16 * (r.depth || 0)) + 'px';
       const icon = document.createElement('span');
       icon.className = 'icon';
       const dot = document.createElement('span');
@@ -369,6 +455,9 @@ function pageHtml(): string {
       if (r.status !== 'error') row.addEventListener('click', () => vscode.postMessage({ type: 'open', label: r.label }));
       return row;
     }));
+  };
+  window.addEventListener('message', e => {
+    if (e.data.type === 'rows') render(e.data.rows);
   });
   vscode.postMessage({ type: 'ready' });
 </script>
@@ -447,8 +536,6 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!view) return;
     const waiting = provider.rows.filter(r => r.status === 'waiting').length;
     view.badge = waiting ? { value: waiting, tooltip: `${waiting} session(s) need input` } : undefined;
-    // Show the dropped prefix next to the view title.
-    view.description = provider.prefix || undefined;
   };
   provider.onDidChange(updateBadge);
 
