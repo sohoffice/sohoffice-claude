@@ -474,6 +474,20 @@ function pageHtml(): string {
         name.className = 'name';
         name.textContent = r.name;
         row.append(chevron('p:' + r.project), name);
+        // A collapsed project shows the most prominent status among its sessions, like a collapsed session.
+        if (collapsed.has('p:' + r.project)) {
+          let status;
+          for (const c of rows) if (!c.group && c.project === r.project && (status === undefined || rank(c.status) < rank(status))) status = c.status;
+          if (status !== undefined) {
+            const icon = document.createElement('span');
+            icon.className = 'icon';
+            icon.title = 'under it: ' + status;
+            const dot = document.createElement('span');
+            dot.className = 'dot ' + status;
+            icon.append(dot);
+            row.append(document.createElement('span'), icon);
+          }
+        }
         row.addEventListener('click', () => toggle('p:' + r.project));
         return row;
       }
