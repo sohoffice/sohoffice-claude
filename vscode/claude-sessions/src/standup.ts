@@ -6,19 +6,22 @@ import * as path from 'path';
 // {
 //   "project": "myapp",
 //   "sessions": [
-//     { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true },
+//     { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true, "model": "opus", "effort": "medium" },
 //     { "role": "UI developer", "parent": "orchestrator", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
 //   ]
 // }
 // "parent" names the role of the session this one works under; the view shows it indented below that session.
 // The session name is "<project> <role>"; the system prompt and stand-up message come from the templates below.
 // "skill": "<name>" is accepted for a single skill.
+// "model" and "effort" are passed to claude as --model and --effort; without them the session takes the CLI's defaults.
 export interface SessionSpec {
   role: string;
   skills: string[];
   description?: string;
   remoteControl?: boolean;
   parent?: string;
+  model?: string;
+  effort?: string;
 }
 
 interface RawSpec {
@@ -28,6 +31,8 @@ interface RawSpec {
   description?: string;
   remoteControl?: boolean;
   parent?: string;
+  model?: string;
+  effort?: string;
 }
 
 export interface Manifest {
@@ -51,7 +56,7 @@ export function readManifest(folder: string): Manifest | undefined {
     const skills = (s?.skills ?? (s?.skill ? [s.skill] : [])).filter(Boolean);
     // A session with no role or no skill cannot be named or told its role: skip it.
     if (!s?.role || !skills.length) continue;
-    sessions.push({ role: s.role, skills, description: s.description, remoteControl: s.remoteControl, parent: s.parent });
+    sessions.push({ role: s.role, skills, description: s.description, remoteControl: s.remoteControl, parent: s.parent, model: s.model, effort: s.effort });
   }
   return { project, sessions };
 }
@@ -113,5 +118,8 @@ export function claudeArgs(manifest: Manifest, spec: SessionSpec, resumeId: stri
   const args = ['--name', name, '--append-system-prompt', systemPrompt(manifest, spec)];
   // Remote Control lets the owner drive the session from claude.ai/code or the Claude app.
   if (spec.remoteControl) args.push('--remote-control', name);
+  // Given on a resume too, so a changed model or effort takes effect at the next start.
+  if (spec.model) args.push('--model', spec.model);
+  if (spec.effort) args.push('--effort', spec.effort);
   return resumeId ? ['--resume', resumeId, ...args] : [...args, STAND_UP];
 }
