@@ -74,7 +74,7 @@ Closes #<T>
 
 ## Review
 
-As soon as the PR is open, start the `pr-review` skill without asking: Codex reviews it and Claude fixes the findings autonomously. Once review and checks pass, pause for the human's explicit approval of the current commit before merging. Both reviewer and human approval are required. A PR is never merged outside that flow.
+As soon as the PR is open, start the `pr-review` skill without asking: Codex reviews it and Claude fixes the findings autonomously. Once review and checks pass, pause for the human's explicit approval of the current commit before merging. Both reviewer and human approval are required, except for a PR the project's settings exempt from human approval, which merges on the reviewer's approval as the `pr-review` skill says. A PR is never merged outside that flow.
 
 ## Rules
 

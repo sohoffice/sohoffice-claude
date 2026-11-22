@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Drive a pull request through review by an external reviewer tool (currently Codex, GPT-6.1-Sol, high effort) — request the review, fix the reviewer's line-cited PR comments, resolve each fixed comment's thread, request re-review, and request explicit human approval after the reviewer approves, then merge and delete the branches only after the human approves the current commit; at most three review rounds before raising to the human. Mirrors the PR in a Slack thread in the project's PR channel. Runs the review and fixes autonomously, with a mandatory human gate before merging. Use immediately after creating a PR, without waiting to be asked, or when resuming a PR already under review.
+description: Drive a pull request through review by an external reviewer tool (currently Codex, GPT-6.1-Sol, high effort) — request the review, fix the reviewer's line-cited PR comments, resolve each fixed comment's thread, request re-review, and request explicit human approval after the reviewer approves, then merge and delete the branches only after the human approves the current commit, or on the reviewer's approval alone for a PR the project's settings exempt from human approval; at most three review rounds before raising to the human. Mirrors the PR in a Slack thread in the project's PR channel. Runs the review and fixes autonomously, with a human gate before merging unless the project exempts the PR. Use immediately after creating a PR, without waiting to be asked, or when resuming a PR already under review.
 ---
 
 # PR review
@@ -36,11 +36,11 @@ To change the reviewer, update this table and the command; keep the [review prom
 
 ## Autonomy
 
-Creating the PR starts this skill; Claude does not ask whether to begin. Claude drives review and fixes — request, wait, fix, push, reply, resolve, re-request — autonomously. This skill is the human's standing authorisation for those pushes, comments, thread resolutions, and the Slack posts and reactions in [Slack thread](#slack-thread). Merging requires separate, explicit human approval through [Human approval](#human-approval); this skill does not authorise an automatic merge.
+Creating the PR starts this skill; Claude does not ask whether to begin. Claude drives review and fixes — request, wait, fix, push, reply, resolve, re-request — autonomously. This skill is the human's standing authorisation for those pushes, comments, thread resolutions, and the Slack posts and reactions in [Slack thread](#slack-thread). Merging requires separate, explicit human approval through [Human approval](#human-approval); this skill does not authorise an automatic merge. The one exception is a PR the project's settings exempt, as [Exempt PRs](#exempt-prs) says: the project's setting is the human's standing authorisation to merge it.
 
 - Wait for the background reviewer run's completion notification; do not poll it and do not hand back to the human while it runs.
-- Pause at the mandatory [Human approval](#human-approval) gate, or stop for a reason listed in [Raising to the human](#raising-to-the-human). Anything else — a failing test, a finding to fix, a re-review to request — Claude handles itself.
-- Report when ready for human approval, then report the final outcome: merged, changes requested, or raised.
+- Pause at the [Human approval](#human-approval) gate, which is mandatory for every PR that is not [exempt](#exempt-prs), or stop for a reason listed in [Raising to the human](#raising-to-the-human). Anything else — a failing test, a finding to fix, a re-review to request — Claude handles itself.
+- Report when ready for human approval, then report the final outcome: merged, changes requested, or raised. For an exempt PR, report the merge and that it needed no human approval.
 
 ## Project settings
 
@@ -51,6 +51,7 @@ The project's instructions (its `CLAUDE.md`, or a file it points to) give the va
 | Reviewer App | The GitHub App the reviewer posts as (`<app>[bot]`), and the directory holding its `app-id` and `private-key.pem` | Review [without an App](#reviewer-identity) |
 | PR channel | The Slack channel where the project's PRs are mirrored: its name and ID | No [Slack thread](#slack-thread) |
 | Slack language | The language of Slack messages | English |
+| Human approval | Which PRs need the human's approval before merging, and which merge on the reviewer's approval alone ([Exempt PRs](#exempt-prs)) | Every PR needs the human's approval |
 | Bot user | The Slack user ID of the bot account Claude and the reviewer post as | In [Human approval](#human-approval), ask the human directly instead of reading Slack replies |
 
 A project with its own review skill follows that skill for posting and approving, not this one; it may still borrow `slack-post.sh` and `slack-upload.sh`.
@@ -78,8 +79,8 @@ Claude and the reviewer post every message as the project's bot user, so it show
 | The PR is created | Claude | Posts the main message in the channel: `[Claude] PR #<N>: <title>`, the PR link, `<branch> → <base>`, then the text of the PR description's **Summary** section in the message body. Notes its timestamp `<thread ts>`. |
 | Each review round finishes | Reviewer | Replies in the thread with the round summary (see the [review prompt](#review-prompt)). |
 | A round's fixes are pushed and their threads resolved | Claude | Adds a `white_check_mark` reaction to that round's summary message. |
-| Ready for human approval | Claude | Adds an `alarm_clock` reaction to the main message, then replies in the PR thread with the PR link, current head SHA, review and check results, and that merging awaits explicit human approval. The reaction stays after the merge; the `white_check_mark` is what shows the PR merged. |
-| The PR is merged | Claude | Adds a `white_check_mark` reaction to the main message. |
+| Ready for human approval, for a PR that needs it | Claude | Adds an `alarm_clock` reaction to the main message, then replies in the PR thread with the PR link, current head SHA, review and check results, and that merging awaits explicit human approval. The reaction stays after the merge; the `white_check_mark` is what shows the PR merged. |
+| The PR is merged | Claude | Adds a `white_check_mark` reaction to the main message. For an [exempt PR](#exempt-prs), first replies in the PR thread with the PR link, the merged head SHA, the review and check results, and that it was merged on the reviewer's approval, without human approval, as the project's settings say. |
 
 When resuming a PR, find its main message by searching the channel for the PR link before posting; never post a second main message for the same PR. If a Slack call fails, retry once, then carry on with the review and mention the gap in the final report; Slack trouble alone never stops review or fixes, and never bypasses the human gate; request approval directly in the session if Slack is unavailable.
 
@@ -89,6 +90,7 @@ When resuming a PR, find its main message by searching the channel for the PR li
 flowchart LR
     req["Request review<br/>(round r)"] --> res{"Reviewer result"}
     res -->|approved| gate["Checks pass → request<br/>human approval"]
+    res -->|approved, PR exempt<br/>and checks pass| merge
     gate -->|human approves current commit| merge["Merge and<br/>delete branches"]
     gate -->|human requests changes| fix
     res -->|findings, r < 3| fix["Fix, push, reply,<br/>resolve fixed threads"] --> req
@@ -200,12 +202,22 @@ Answers count as follows:
 - Do not enable auto-merge or merge while approval is pending. If the human requests changes, implement them, rerun checks and reviewer review within the existing three-round limit, then request fresh human approval.
 - Any new head commit invalidates both reviewer and human approval. Re-review it within the three-round limit and request fresh human approval; if no rounds remain, raise to the human.
 
+### Exempt PRs
+
+A project's [settings](#project-settings) may say that some of its PRs merge on the reviewer's approval alone. Such a PR skips the request and the wait above: once the reviewer has approved the latest commit, go to [Merging](#merging).
+
+- **Only what the setting names.** A PR is exempt only when the project's Human approval setting clearly covers it. A project that gives no such setting exempts nothing, and a PR the setting leaves in doubt needs the human's approval.
+- **Only with a reviewer App.** A PR is exempt only where the project has a [reviewer GitHub App](#reviewer-identity), so that GitHub itself requires the reviewer's approval of the head commit. Without an App, every PR needs the human's approval.
+- **Judge the head being merged.** Check the setting against the PR as it stands at that head, its whole diff against the base included (`gh pr diff <N> --name-only`), just before merging. A later push can move a PR out of the exemption.
+- **The human can still step in.** If the human asks for changes or says to hold the PR, in the session or in its GitHub or Slack thread, the PR is no longer exempt: make the changes, and request the human's approval as above.
+- **The rest of the flow holds.** The three-round limit, [Raising to the human](#raising-to-the-human) and every step of [Merging](#merging) apply unchanged. A PR raised to the human is merged only on the human's word.
+
 ## Merging
 
-Only after both the reviewer's approval and the human's explicit approval apply to the latest commit:
+Only after both the reviewer's approval and the human's explicit approval apply to the latest commit, or, for an [exempt PR](#exempt-prs), the reviewer's approval does:
 
 1. Check the PR is mergeable, its checks pass (`gh pr checks <N>`), with an App its `reviewDecision` is `APPROVED`, and no `**[PR review]**` thread is left unresolved. If one is, treat it as a disagreement and raise to the human.
-2. Re-read the PR head SHA and confirm it matches the commit approved by both reviewer and human. Merge that exact head and delete the remote branch: `gh pr merge <N> --squash --delete-branch --match-head-commit <approved-head-sha>`. If the head changed, return to review and human approval.
+2. Re-read the PR head SHA and confirm it matches the commit approved by both reviewer and human, or by the reviewer for an exempt PR, and that an exempt PR is still exempt at that head. Merge that exact head and delete the remote branch: `gh pr merge <N> --squash --delete-branch --match-head-commit <approved-head-sha>`. If the head changed, return to review and, where the PR needs it, human approval.
 3. Switch to the base branch, pull, and delete the local branch if it still exists.
 4. Add a `white_check_mark` reaction to the PR's main message in the [Slack thread](#slack-thread).
 
@@ -221,9 +233,9 @@ The message gives the PR link, the rounds run, and each unresolved finding with 
 
 ## Rules
 
-- **Drive review autonomously.** Pause for explicit human approval before merging, and stop for the listed escalation conditions.
+- **Drive review autonomously.** Pause for explicit human approval before merging, unless the PR is exempt, and stop for the listed escalation conditions.
 - **Resolve only what was fixed.** A thread is resolved after its fix is pushed; disputed threads stay open for the reviewer.
-- **Both approvals are required.** Never merge without the reviewer's approval and explicit human approval for the current commit.
+- **Both approvals are required.** Never merge without the reviewer's approval and explicit human approval for the current commit. Only a PR the project's settings exempt, in a project with a reviewer App, merges on the reviewer's approval alone.
 - **The App is the reviewer's.** Only the reviewer's run uses the reviewer App's token; the author session never mints or uses it, and never approves its own PR. A clean output file alone is not approval.
 - **Always squash merge.** No other merge method is used.
 - **The reviewer reviews; Claude fixes.** The reviewer never edits, commits or pushes.
