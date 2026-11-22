@@ -39,7 +39,7 @@ Put the project's agent sessions in `.claude/sessions.json` at the workspace fol
 {
   "project": "myapp",
   "sessions": [
-    { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true },
+    { "role": "orchestrator", "skills": ["orchestrator"], "remoteControl": true, "model": "opus", "effort": "medium" },
     { "role": "UI developer", "parent": "orchestrator", "description": "owning the client apps", "skills": ["way-of-working", "task-execution"] }
   ]
 }
@@ -53,6 +53,8 @@ Put the project's agent sessions in `.claude/sessions.json` at the workspace fol
 | `sessions[].description` | Optional words on the role, added to the system prompt after the project, such as `owning the back end` |
 | `sessions[].remoteControl` | Start the session with Remote Control (`--remote-control <name>`), to drive it from claude.ai/code or the Claude app |
 | `sessions[].parent` | Optional role of the session this one works under; the view indents it below that session. A session whose parent is not shown is top-level |
+| `sessions[].model` | Optional model for the session, an alias such as `opus` or a full model ID, passed as `--model`. Without it the session takes the CLI's default |
+| `sessions[].effort` | Optional effort level for the session, such as `medium`, passed as `--effort`. Without it the session takes the CLI's default |
 
 When the folder opens, and with **Claude Sessions: Stand Up All Sessions** (the play button on the view), each declared session that has no terminal in this window and no live process elsewhere starts in its own terminal, named after the session:
 
