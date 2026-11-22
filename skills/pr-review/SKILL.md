@@ -207,9 +207,11 @@ Answers count as follows:
 A project's [settings](#project-settings) may say that some of its PRs merge on the reviewer's approval alone. Such a PR skips the request and the wait above: once the reviewer has approved the latest commit, go to [Merging](#merging).
 
 - **Only what the setting names.** A PR is exempt only when the project's Human approval setting clearly covers it. A project that gives no such setting exempts nothing, and a PR the setting leaves in doubt needs the human's approval.
+- **Only a setting the human has already accepted.** The setting that counts is the one on the PR's base branch, read from there (`git show origin/<base>:<file>` after a fetch), never the PR branch's copy. A PR cannot exempt itself: one that adds or changes the Human approval setting, or the file that holds it, needs the human's approval.
 - **Only with a reviewer App.** A PR is exempt only where the project has a [reviewer GitHub App](#reviewer-identity), so that GitHub itself requires the reviewer's approval of the head commit. Without an App, every PR needs the human's approval.
 - **Judge the head being merged.** Check the setting against the PR as it stands at that head, its whole diff against the base included (`gh pr diff <N> --name-only`), just before merging. A later push can move a PR out of the exemption.
 - **The human can still step in.** If the human asks for changes or says to hold the PR, in the session or in its GitHub or Slack thread, the PR is no longer exempt: make the changes, and request the human's approval as above.
+- **Read the human's replies before merging.** No check is scheduled for an exempt PR, so just before merging read everything posted since the PR was opened: its GitHub comments and reviews (`gh pr view <N> --comments`) and the replies in its [Slack thread](#slack-thread). Tell the human's replies from Claude's and the reviewer's by the rules above. Any hold or change request from the human that is still outstanding stops the merge; if a reply leaves it in doubt, ask the human and do not merge.
 - **The rest of the flow holds.** The three-round limit, [Raising to the human](#raising-to-the-human) and every step of [Merging](#merging) apply unchanged. A PR raised to the human is merged only on the human's word.
 
 ## Merging
@@ -217,7 +219,7 @@ A project's [settings](#project-settings) may say that some of its PRs merge on 
 Only after both the reviewer's approval and the human's explicit approval apply to the latest commit, or, for an [exempt PR](#exempt-prs), the reviewer's approval does:
 
 1. Check the PR is mergeable, its checks pass (`gh pr checks <N>`), with an App its `reviewDecision` is `APPROVED`, and no `**[PR review]**` thread is left unresolved. If one is, treat it as a disagreement and raise to the human.
-2. Re-read the PR head SHA and confirm it matches the commit approved by both reviewer and human, or by the reviewer for an exempt PR, and that an exempt PR is still exempt at that head. Merge that exact head and delete the remote branch: `gh pr merge <N> --squash --delete-branch --match-head-commit <approved-head-sha>`. If the head changed, return to review and, where the PR needs it, human approval.
+2. Re-read the PR head SHA and confirm it matches the commit approved by both reviewer and human, or by the reviewer for an exempt PR, and that an exempt PR is still exempt at that head, with no hold from the human, as [Exempt PRs](#exempt-prs) says. Merge that exact head and delete the remote branch: `gh pr merge <N> --squash --delete-branch --match-head-commit <approved-head-sha>`. If the head changed, return to review and, where the PR needs it, human approval.
 3. Switch to the base branch, pull, and delete the local branch if it still exists.
 4. Add a `white_check_mark` reaction to the PR's main message in the [Slack thread](#slack-thread).
 
