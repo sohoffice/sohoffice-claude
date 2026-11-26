@@ -14,10 +14,11 @@ effort=${3:-$(jq -r '.effort' "$config")}
 logs=${out%.md}
 
 # Each reviewer may read, run gh and read-only git, post as the App and reply in Slack; none may write files or merge.
-# The skill's scripts are named as the permission rules spell them, with a literal ~.
+# Only the two scripts the review prompt uses are allowed, never the directory: this script is in it too.
+# They are named as the permission rules spell them, with a literal ~.
 claude_allow=("Bash(gh *)" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git merge-base *)"
-  "Bash(git rev-parse *)" "Bash(git cat-file *)" "Bash(jq *)" "Bash(cat *)" "Bash(~/.claude/skills/pr-review/*)"
-  Read Grep Glob)
+  "Bash(git rev-parse *)" "Bash(git cat-file *)" "Bash(jq *)" "Bash(cat *)"
+  "Bash(~/.claude/skills/pr-review/reviewer-gh.sh *)" "Bash(~/.claude/skills/pr-review/slack-post.sh *)" Read Grep Glob)
 claude_deny=("Bash(gh pr merge *)" "Bash(gh * pr merge *)" "Bash(~/.claude/skills/pr-review/reviewer-gh.sh * pr merge *)")
 agy_settings='{"permissions":{
   "allow":["command(gh)","command(git diff)","command(git log)","command(git show)","command(git merge-base)",
