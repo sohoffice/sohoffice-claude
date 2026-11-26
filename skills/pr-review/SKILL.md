@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Drive a pull request through review by an external reviewer tool (currently Codex, GPT-6.1-Sol, high effort, with Claude Opus as the fallback when Codex is unavailable) — request the review, fix the reviewer's line-cited PR comments, resolve each fixed comment's thread, request re-review, and request explicit human approval after the reviewer approves, then merge and delete the branches only after the human approves the current commit, or on the reviewer's approval alone for a PR the project's settings exempt from human approval; at most three review rounds before raising to the human. Mirrors the PR in a Slack thread in the project's PR channel. Runs the review and fixes autonomously, with a human gate before merging unless the project exempts the PR. Use immediately after creating a PR, without waiting to be asked, or when resuming a PR already under review.
+description: Drive a pull request through review by an external reviewer tool (currently Codex on GPT-6.1-Sol, then Claude Opus, then agy on Gemini Flash, in that order of preference, at high effort) — request the review, fix the reviewer's line-cited PR comments, resolve each fixed comment's thread, request re-review, and request explicit human approval after the reviewer approves, then merge and delete the branches only after the human approves the current commit, or on the reviewer's approval alone for a PR the project's settings exempt from human approval; at most three review rounds before raising to the human. Mirrors the PR in a Slack thread in the project's PR channel. Runs the review and fixes autonomously, with a human gate before merging unless the project exempts the PR. Use immediately after creating a PR, without waiting to be asked, or when resuming a PR already under review.
 ---
 
 # PR review
@@ -22,18 +22,22 @@ description: Drive a pull request through review by an external reviewer tool (c
 
 ## Reviewer
 
-The reviewer is an external tool, separate from Claude. Only this section and the command in [Requesting a review](#requesting-a-review) name it; the rest of the skill holds for any reviewer.
+The reviewer is an external tool run as its own process, separate from the author's session. Only this section and the commands in [Requesting a review](#requesting-a-review) name the tools; the rest of the skill holds for any reviewer.
 
-| Setting | Current value |
-| :--- | :--- |
-| Tool | Codex CLI |
-| Model | `gpt-6.1-sol`, or the nearest equivalent if it is unavailable |
-| Effort | high, unless the project's [settings](#project-settings) give another for the PR |
-| Fallback | Claude Code (`claude -p`) on Opus, at the same effort, for a round Codex cannot run, as the Owner decided on 2026-11-26 (#12); see [Fallback reviewer](#fallback-reviewer) |
+The reviewers, in order of preference:
 
-To change the reviewer, update this table and the commands; keep the [review prompt](#review-prompt) as is.
+| Order | Tool | Model | Effort | Cannot run when |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | Codex CLI (`codex exec`) | `gpt-6.1-sol` | high | its output says `You've hit your usage limit`, or `codex` is not installed or not signed in |
+| 2 | Claude Code (`claude -p`) | `opus` | high | its output says a usage limit is reached, or `claude` is not signed in |
+| 3 | Antigravity CLI (`agy`) | `gemini-3.8-flash-high` | high | its output says `exhausted your quota`, or `agy` is not signed in |
 
-`--approve-for-me` routes the reviewer's approval requests, such as its Slack reply, through automatic review in the workspace-write sandbox. It cannot be combined with `-s`/`--sandbox`.
+- **Effort.** The table's, unless the project's [settings](#project-settings) give another for the PR; the same effort for whichever tool runs the round.
+- **Order.** A round runs with the first reviewer that can run it, and each round starts again from the first. The Owner decided the order on 2026-11-26 (#12, #13): Claude second, since it uses the human's Claude allowance; `agy` last, since the human's Gemini plan allows only a basic model and very little use.
+- **One prompt.** Every reviewer gets the same [review prompt](#review-prompt). To change a reviewer, update this table and its command; keep the prompt as is.
+- **The same capabilities.** Each reviewer may read the repository, run `gh` and read-only `git`, post as the App through `reviewer-gh.sh` and reply in Slack through `slack-post.sh`. None may edit files, commit, push or merge. The Claude and `agy` commands confine their tools to that. Codex's command does not yet: its workspace-write sandbox keeps it from writing outside the repository, but within it, and for merging, it rests on the prompt, until its rules are set for the reviewer's run alone (#13). What a tool's rules cannot express, such as which `gh api` calls write, rests on the prompt's "Do not edit code, commit, or push" for every reviewer.
+
+Codex's `--approve-for-me` routes the reviewer's approval requests, such as its Slack reply, through automatic review in the workspace-write sandbox. It cannot be combined with `-s`/`--sandbox`.
 
 ## Autonomy
 
@@ -104,7 +108,7 @@ A round is one review. At most three rounds run. A round-3 review that still has
 
 ## Requesting a review
 
-Write the [review prompt](#review-prompt), filled in with round `r`, PR `<N>`, `<owner>/<repo>`, the App config directory and the Slack channel ID, `<thread ts>` and Slack language (drop the Slack paragraph for a project with no [Slack thread](#slack-thread)), to a prompt file. Keep the `[With an App]` lines for a project with a [reviewer GitHub App](#reviewer-identity) and the `[Without an App]` lines otherwise, dropping the brackets. Where the project's settings give review checks for a PR of this kind, keep the `[Project checks]` lines too, filled in with those checks in the project's own words; otherwise drop them. In round 1 keep the `[Round 1]` lines; in a later round keep the `[Later round]` lines instead, filled in with `<previous head>`, the head commit the previous round reviewed, and `<head>`, the PR's head now, which the author pushed from the checkout the reviewer runs in, so the reviewer reads what changed since then and not the whole PR again. `<previous head>` is the `commit_id` of the previous round's review (`gh api repos/{owner}/{repo}/pulls/<N>/reviews`); where that round approved without an App, so left a comment and not a review, it is the last commit pushed before that comment (`gh pr view <N> --json commits,comments`). A line with two tags is kept only when both apply. Where `<previous head>` is not an ancestor of `<head>` (`git merge-base --is-ancestor <previous head> <head>` fails), as after a rebase, keep the `[Round 1]` lines: that round reviews the whole PR. `<effort>` in the command is the project's reviewer effort for a PR of this kind, or the [Reviewer](#reviewer) table's. Then run the reviewer from the repository root, in the background (a high-effort review takes minutes). With Codex:
+Write the [review prompt](#review-prompt), filled in with round `r`, PR `<N>`, `<owner>/<repo>`, the App config directory and the Slack channel ID, `<thread ts>` and Slack language (drop the Slack paragraph for a project with no [Slack thread](#slack-thread)), to a prompt file. Keep the `[With an App]` lines for a project with a [reviewer GitHub App](#reviewer-identity) and the `[Without an App]` lines otherwise, dropping the brackets. Where the project's settings give review checks for a PR of this kind, keep the `[Project checks]` lines too, filled in with those checks in the project's own words; otherwise drop them. In round 1 keep the `[Round 1]` lines; in a later round keep the `[Later round]` lines instead, filled in with `<previous head>`, the head commit the previous round reviewed, and `<head>`, the PR's head now, which the author pushed from the checkout the reviewer runs in, so the reviewer reads what changed since then and not the whole PR again. `<previous head>` is the `commit_id` of the previous round's review (`gh api repos/{owner}/{repo}/pulls/<N>/reviews`); where that round approved without an App, so left a comment and not a review, it is the last commit pushed before that comment (`gh pr view <N> --json commits,comments`). From round 2 on, also keep the `[Earlier findings]` lines, whichever of the others are kept. A line with two tags is kept only when both apply. Where `<previous head>` is not an ancestor of `<head>` (`git merge-base --is-ancestor <previous head> <head>` fails), as after a rebase, keep the `[Round 1]` lines in place of the `[Later round]` lines: that round reviews the whole PR, and still checks the earlier findings. `<effort>` in the command is the project's reviewer effort for a PR of this kind, or the [Reviewer](#reviewer) table's. Then run the reviewer from the repository root, in the background (a high-effort review takes minutes). With Codex:
 
 ```bash
 codex exec -m gpt-6.1-sol -c model_reasoning_effort='"<effort>"' --approve-for-me \
@@ -112,11 +116,13 @@ codex exec -m gpt-6.1-sol -c model_reasoning_effort='"<effort>"' --approve-for-m
   -o <scratchpad>/pr-review-<N>-r<r>.md - < <scratchpad>/pr-review-<N>-r<r>-prompt.md
 ```
 
-When it finishes, read the output file, then confirm the outcome on GitHub: the approval exists, or the round-`r` review and its inline comments do. With an App, the approval is the App's approving review on the current head: `gh pr view <N> --json reviewDecision,latestReviews,headRefOid` shows `reviewDecision` `APPROVED` and the App's latest review `APPROVED` at `headRefOid`. Without an App, it is the approval comment. If Codex could not run the round, as the [Fallback reviewer](#fallback-reviewer) section says, run that round with the fallback at once. If the reviewer failed or posted nothing for another reason, rerun the same round once; if it fails again, raise to the human. Also read the Slack thread and note the `ts` of the round-`r` `[PR review]` reply; if it is missing, say so in the final report rather than rerunning the round.
+When it finishes, read the output file, then confirm the outcome on GitHub: the approval exists, or the round-`r` review and its inline comments do. With an App, the approval is the App's approving review on the current head: `gh pr view <N> --json reviewDecision,latestReviews,headRefOid` shows `reviewDecision` `APPROVED` and the App's latest review `APPROVED` at `headRefOid`. Without an App, it is the approval comment. If a reviewer cannot run the round, as the [reviewer table](#reviewer) says, run the round at once with the next one, as [Other reviewers](#other-reviewers) says. If the reviewer failed or posted nothing for another reason, rerun the same round once; if it fails again, raise to the human. Also read the Slack thread and note the `ts` of the round-`r` `[PR review]` reply; if it is missing, say so in the final report rather than rerunning the round.
 
-### Fallback reviewer
+### Other reviewers
 
-Codex cannot run a round when its output says its usage limit is reached (`You've hit your usage limit`), or when `codex` is not installed or not signed in. Then that round runs with Claude Code on Opus, with the same prompt file, from the repository root, in the background:
+When Codex cannot run a round, it runs with Claude Code, and when Claude cannot either, with `agy`, each with the same prompt file, from the repository root, in the background.
+
+Claude Code:
 
 ```bash
 claude -p --model opus --effort <effort> --setting-sources user \
@@ -127,12 +133,24 @@ claude -p --model opus --effort <effort> --setting-sources user \
   --output-format text < <scratchpad>/pr-review-<N>-r<r>-prompt.md > <scratchpad>/pr-review-<N>-r<r>.md
 ```
 
-- **A separate run, never a subagent.** The fallback is its own `claude -p` process, as Codex is its own `codex exec` process, so the reviewer App's token stays in the reviewer's run. An Agent subagent of the author session would be the author reviewing, and minting the token, in its own session.
-- **What it may do.** It has no Edit or Write tool; its `git` is limited to reading history and diffs; and merging a PR is denied, a deny rule taking precedence over the allow list. It runs `gh`, posts as the App through `reviewer-gh.sh` and replies in Slack through `slack-post.sh`. What else `gh api` could write is held back only by the prompt's "Do not edit code, commit, or push", since it runs without Codex's sandbox. `--setting-sources user` leaves out the project's settings, so the project's hooks do not run for it.
-- **Its approval counts as the reviewer's.** A round the fallback approves is approved, as one Codex approves, for merging and for the human approval gate alike.
-- **Codex first again.** Each round tries Codex first; the fallback is for the round Codex cannot run, not for the rest of the PR.
-- **Say which reviewer ran.** Say in the Slack thread and in the [human approval](#human-approval) request which rounds the fallback reviewed, since it is the same model family as the author and may share its blind spots.
-- **It uses the human's Claude allowance.** A round on a large PR is costly; the [Later round](#review-prompt) lines keep later rounds small.
+`agy`, whose permission rules match each token of a command as a whole word, a token being a regular expression:
+
+```bash
+agy --model gemini-3.8-flash-high --effort <effort> --output-format text --settings '{"permissions":{
+  "allow":["command(gh)","command(git diff)","command(git log)","command(git show)",
+    "command(git merge-base)","command(git rev-parse)","command(git cat-file)","command(jq)",
+    "command(cat)","command(printf)","command(~/.claude/skills/pr-review/reviewer-gh.sh)",
+    "command(~/.claude/skills/pr-review/slack-post.sh)","read_file(*)"],
+  "deny":["command(gh pr merge)","command(~/.claude/skills/pr-review/reviewer-gh.sh .* .* pr merge)",
+    "write_file(*)"]}}' \
+  -p="$(cat <scratchpad>/pr-review-<N>-r<r>-prompt.md)" > <scratchpad>/pr-review-<N>-r<r>.md
+```
+
+- **Separate runs, never a subagent.** Each reviewer is its own process, as Codex is, so the reviewer App's token stays in the reviewer's run. An Agent subagent of the author session would be the author reviewing, and minting the token, in its own session.
+- **What they may do.** Neither has a file-writing tool; their `git` is limited to reading history and diffs; and merging a PR is denied, a deny rule taking precedence over the allow list. `--setting-sources user` leaves out the project's Claude settings, so the project's hooks do not run for the Claude reviewer.
+- **Their approval counts as the reviewer's.** A round either approves is approved, as one Codex approves, for merging and for the human approval gate alike.
+- **Say which reviewer ran.** Say in the Slack thread and in the [human approval](#human-approval) request which rounds Claude or `agy` reviewed. Claude is the same model family as the author and may share its blind spots; `agy` runs a basic model.
+- **They use the human's allowances.** A round on a large PR is costly; the [later-round](#review-prompt) lines keep later rounds small.
 
 ### Review prompt
 
@@ -144,18 +162,18 @@ You are reviewing GitHub PR #<N> in this repository, round <r> of at most 3.
 [Round 1] Read the PR with `gh pr view <N>` and `gh pr diff <N>`, and the surrounding code as needed.
 [Later round] Read the PR with `gh pr view <N>`. The previous round reviewed commit <previous head>;
 [Later round] review only what changed since then, not the whole PR again. List the PR's files with
-[Later round] `gh pr diff <N> --name-only`, and read `git diff <previous head> <head> -- <those files>`;
+[Later round] `gh pr diff <N> --name-only`, and read `git diff <previous head> <head> --` followed by those files;
 [Later round] both commits are in this checkout. Keeping to the PR's files leaves out what a merge from
 [Later round] the base branch changed in other files, but not in these: if `git log --merges <previous head>..<head>`
 [Later round] lists a merge, a hunk you did not expect may be the base branch's, which `git diff <merge>^1 <merge>` shows.
 [Later round] Read other code only as far as you need to judge that change and the earlier findings.
-[Later round] First read the earlier review comments and Claude's replies
-[Later round] (`gh api repos/{owner}/{repo}/pulls/<N>/comments`, `gh pr view <N> --comments`) and
-[Later round] check each earlier finding is fixed or convincingly answered. Threads Claude resolved
-[Later round] are ones it says it fixed: verify the fix, and if it is inadequate raise a new inline
-[Later round] comment. Threads left unresolved are ones Claude disputed: if its reasoning convinces
-[Later round] you, resolve the thread (GraphQL `resolveReviewThread`); otherwise reply in the thread
-[Later round] and keep it as a finding.
+[Earlier findings] First read the earlier review comments and Claude's replies
+[Earlier findings] (`gh api repos/{owner}/{repo}/pulls/<N>/comments`, `gh pr view <N> --comments`) and
+[Earlier findings] check each earlier finding is fixed or convincingly answered. Threads Claude resolved
+[Earlier findings] are ones it says it fixed: verify the fix, and if it is inadequate raise a new inline
+[Earlier findings] comment. Threads left unresolved are ones Claude disputed: if its reasoning convinces
+[Earlier findings] you, resolve the thread (GraphQL `resolveReviewThread`); otherwise reply in the thread
+[Earlier findings] and keep it as a finding.
 
 Review for correctness, security, missed requirements, and maintainability. Do not edit
 code, commit, or push.
