@@ -194,7 +194,8 @@ If you have no findings, approve with a body that is exactly
 [With an App] Submit it as an approving review: `gh pr review <N> --approve --body '<body>'`.
 [Without an App] Post it as a PR comment: `gh pr comment <N> --body '<body>'`.
 
-Then reply in Slack by giving the reply, in a here-document, as the standard input of
+Then reply in Slack by giving the reply, in a here-document with a quoted delimiter (`<<'EOF'`),
+so the shell expands nothing in it, as the standard input of
 `~/.claude/skills/pr-review/slack-post.sh <channel ID> <thread ts>`, never as a new channel
 message and never with your Slack tools. The reply starts with
 `[PR review] Round <r>:` and gives either `APPROVED` or the finding count with a one-line
