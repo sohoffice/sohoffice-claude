@@ -28,7 +28,7 @@ The reviewer is an external tool, separate from Claude. Only this section and th
 | :--- | :--- |
 | Tool | Codex CLI |
 | Model | `gpt-6.1-sol`, or the nearest equivalent if it is unavailable |
-| Effort | high |
+| Effort | high, unless the project's [settings](#project-settings) give another for the PR |
 
 To change the reviewer, update this table and the command; keep the [review prompt](#review-prompt) as is.
 
@@ -52,6 +52,8 @@ The project's instructions (its `CLAUDE.md`, or a file it points to) give the va
 | PR channel | The Slack channel where the project's PRs are mirrored: its name and ID | No [Slack thread](#slack-thread) |
 | Slack language | The language of Slack messages | English |
 | Human approval | Which PRs need the human's approval before merging, and which merge on the reviewer's approval alone ([Exempt PRs](#exempt-prs)) | Every PR needs the human's approval |
+| Reviewer effort | The reviewer's effort for a kind of PR, where it differs from the [Reviewer](#reviewer) table's, such as a higher one for implementation PRs | The table's effort for every PR |
+| Review checks | What the reviewer checks on a kind of PR beyond the [review prompt](#review-prompt)'s own instruction, such as comparing the change with the plan it implements | None |
 | Bot user | The Slack user ID of the bot account Claude and the reviewer post as | In [Exempt PRs](#exempt-prs), ask the human in the session about any Slack reply that may be theirs |
 
 A project with its own review skill follows that skill for posting and approving, not this one; it may still borrow `slack-post.sh` and `slack-upload.sh`.
@@ -101,10 +103,10 @@ A round is one review. At most three rounds run. A round-3 review that still has
 
 ## Requesting a review
 
-Write the [review prompt](#review-prompt), filled in with round `r`, PR `<N>`, `<owner>/<repo>`, the App config directory and the Slack channel ID, `<thread ts>` and Slack language (drop the Slack paragraph for a project with no [Slack thread](#slack-thread)), to a prompt file. Keep the `[With an App]` lines for a project with a [reviewer GitHub App](#reviewer-identity) and the `[Without an App]` lines otherwise, dropping the brackets. Then run the reviewer from the repository root, in the background (a high-effort review takes minutes). With Codex:
+Write the [review prompt](#review-prompt), filled in with round `r`, PR `<N>`, `<owner>/<repo>`, the App config directory and the Slack channel ID, `<thread ts>` and Slack language (drop the Slack paragraph for a project with no [Slack thread](#slack-thread)), to a prompt file. Keep the `[With an App]` lines for a project with a [reviewer GitHub App](#reviewer-identity) and the `[Without an App]` lines otherwise, dropping the brackets. Where the project's settings give review checks for a PR of this kind, keep the `[Project checks]` lines too, filled in with those checks in the project's own words; otherwise drop them. `<effort>` in the command is the project's reviewer effort for a PR of this kind, or the [Reviewer](#reviewer) table's. Then run the reviewer from the repository root, in the background (a high-effort review takes minutes). With Codex:
 
 ```bash
-codex exec -m gpt-6.1-sol -c model_reasoning_effort='"high"' --approve-for-me \
+codex exec -m gpt-6.1-sol -c model_reasoning_effort='"<effort>"' --approve-for-me \
   -c sandbox_workspace_write.network_access=true \
   -o <scratchpad>/pr-review-<N>-r<r>.md - < <scratchpad>/pr-review-<N>-r<r>-prompt.md
 ```
@@ -129,6 +131,8 @@ and keep it as a finding.
 
 Review for correctness, security, missed requirements, and maintainability. Do not edit
 code, commit, or push.
+[Project checks] This project also asks, for a PR of this kind: <review checks>
+[Project checks] Make each check in full, and raise each thing it finds as a finding.
 
 If you have findings: submit ONE review with inline comments through
 `gh api repos/{owner}/{repo}/pulls/<N>/reviews` with `event: "COMMENT"` and a
