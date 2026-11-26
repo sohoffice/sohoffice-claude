@@ -11,7 +11,11 @@ import re
 import shlex
 import sys
 
-SEPARATORS = {";", "&&", "||", "|", "&", "(", ")"}
+SEPARATORS = {";", "&&", "||", "|", "&", "(", ")", "\n"}
+WRAPPERS = {"env", "command", "exec", "nohup", "time", "xargs", "nice", "timeout"}
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+MERGE_ENDPOINT = re.compile(r"(?:https?://[^/\s]+)?/?(?:api/v3/)?repos/[^/\s]+/[^/\s]+/pulls/\d+/merge/?(?:\?.*)?")
+MERGE_QUERY = re.compile(r"(?:-[fF]|--(?:raw-)?field=)?query=.*mergePullRequest", re.S)
 
 
 def deny(reason):
@@ -22,13 +26,16 @@ def deny(reason):
 
 def merges(words):
     """Whether one simple command, as words, merges a pull request."""
-    while words and re.fullmatch(r"[A-Za-z_]\w*=.*", words[0]):  # VAR=value before the command
+    # Drop VAR=value assignments and wrappers such as env or xargs, with their options, before the command.
+    while words and (re.fullmatch(r"[A-Za-z_]\w*=.*", words[0]) or words[0].rsplit("/", 1)[-1] in WRAPPERS
+                     or (words[0].startswith("-") and len(words) > 1)):
         words = words[1:]
     if not words:
         return False
     tool = words[0].rsplit("/", 1)[-1]
-    if tool in ("sh", "bash", "zsh") and len(words) > 2 and re.fullmatch(r"-\w*c\w*", words[1]):
-        return command_merges(words[2])
+    if tool in SHELLS:
+        # Any argument may be the -c script, whatever options come first.
+        return any(command_merges(w) for w in words[1:] if not w.startswith("-"))
     if tool == "reviewer-gh.sh":
         words = words[3:]
     elif tool == "gh":
@@ -47,17 +54,16 @@ def merges(words):
     if plain[:2] == ["pr", "merge"]:
         return True
     if plain[:1] == ["api"]:
-        if any(re.fullmatch(r"/?repos/[^/=\s]+/[^/=\s]+/pulls/\d+/merge/?", w) for w in words):
-            return True
-        if any(re.match(r"query=", w) and "mergePullRequest" in w for w in words):
-            return True
+        return any(MERGE_ENDPOINT.fullmatch(w) or MERGE_QUERY.match(w) for w in words)
     return False
 
 
 def command_merges(command):
     """Whether a shell command line merges a pull request in any of its simple commands."""
     try:
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
+        # An unquoted newline ends a command, as ; does; a quoted one stays in its word.
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()\n")
+        lexer.whitespace = " \t\r"
         lexer.whitespace_split = True
         tokens = list(lexer)
     except ValueError:
