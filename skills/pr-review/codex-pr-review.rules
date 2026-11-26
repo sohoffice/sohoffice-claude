@@ -1,0 +1,5 @@
+# Codex execution policy for the pr-review skill (#15): a reviewer never merges a pull request.
+# run-review.sh installs this file as ~/.codex/rules/pr-review.rules before each Codex round; Codex reads rules only
+# from there, so it binds every Codex session of this user, not the reviewer's alone.
+# The reviewer App cannot merge at all: its contents permission is read-only.
+prefix_rule(pattern=["gh", "pr", "merge"], decision="forbidden", justification="pr-review: a reviewer never merges; the author session merges after approval")
