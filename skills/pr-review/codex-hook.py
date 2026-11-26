@@ -2,9 +2,8 @@
 """PreToolUse hook run-review.sh gives the Codex reviewer for its run alone (#19).
 
 Denies file edits through apply_patch, and any command that merges a pull request: `gh ... pr ... merge`, the same
-through reviewer-gh.sh, `gh api` on a pulls/<n>/merge endpoint, and a GraphQL mergePullRequest query given inline.
-A query read from a file or stdin is not seen, nor a command built at run time, such as through eval. Words are split as the shell splits them, so a quoted review body
-that mentions a merge is not a merge.
+through reviewer-gh.sh, `gh api` on a pulls/<n>/merge endpoint, and a GraphQL mergePullRequest query. Words are split
+as the shell splits them, so a quoted review body that mentions a merge is not a merge.
 """
 import json
 import re
@@ -12,9 +11,20 @@ import shlex
 import sys
 
 PUNCTUATION = ";&|()\n"
-WRAPPERS = {"env", "command", "exec", "nohup", "time", "xargs", "nice", "timeout"}
+# Each wrapper's options that take a value, and the operands it reads before the command it runs.
+WRAPPERS = {
+    "env": ({"-u", "--unset", "-C", "--chdir", "-P", "-S", "--split-string"}, 0),
+    "timeout": ({"-s", "--signal", "-k", "--kill-after"}, 1),
+    "nice": ({"-n", "--adjustment"}, 0),
+    "xargs": ({"-n", "-I", "-L", "-P", "-s", "-d", "-E", "-a", "--max-args", "--replace", "--max-lines",
+               "--max-procs", "--max-chars", "--delimiter", "--eof", "--arg-file"}, 0),
+    "exec": ({"-a"}, 0),
+    "time": ({"-f", "-o", "--format", "--output"}, 0),
+    "command": (set(), 0),
+    "nohup": (set(), 0),
+}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
-SHELL_OPTIONS_WITH_VALUE = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
+SHELL_LONG_OPTIONS_WITH_VALUE = {"--rcfile", "--init-file"}
 MERGE_ENDPOINT = re.compile(r"(?:https?://[^/\s]+)?/?(?:api/v3/)?repos/[^/\s]+/[^/\s]+/pulls/\d+/merge/?(?:\?.*)?")
 MERGE_QUERY = re.compile(r"(?:-[fF]|--(?:raw-)?field=)?query=.*mergePullRequest", re.S)
 
@@ -27,18 +37,44 @@ def deny(reason):
 
 def shell_script(words):
     """The -c script of a shell's arguments, or None when it runs a script file or reads stdin."""
-    has_c, skip = False, False
+    has_c, values, ended = False, 0, False
     for w in words:
+        if values:
+            values -= 1
+        elif ended or w[:1] not in "-+" or len(w) == 1:
+            return w if has_c else None
+        elif w == "--":
+            ended = True
+        elif w.startswith("--"):
+            values = 1 if w in SHELL_LONG_OPTIONS_WITH_VALUE else 0
+        else:
+            # A cluster such as -lc or -co: c marks a -c script; each o or O takes the next word as its value.
+            has_c = has_c or (w[0] == "-" and "c" in w[1:])
+            values = sum(w[1:].count(x) for x in "oO")
+    return None
+
+
+def wrapped(tool, words):
+    """The command a wrapper runs: its words, a command line given to env -S, or None when there is none."""
+    valued, operands = WRAPPERS[tool]
+    for i, w in enumerate(words):
+        if tool == "env" and w.startswith(("-S", "--split-string")):
+            value = words[i + 1] if w in ("-S", "--split-string") and i + 1 < len(words) else w.split("=", 1)[-1] if w.startswith("--") else w[2:]
+            return " ".join([value] + [shlex.quote(x) for x in words[i + 2 if w in ("-S", "--split-string") else i + 1:]])
+    skip = False
+    for i, w in enumerate(words):
         if skip:
             skip = False
-        elif w in SHELL_OPTIONS_WITH_VALUE:
-            skip = True
-        elif w.startswith("--"):
+        elif w == "--":
+            return words[i + 1:]
+        elif w.startswith("-") and len(w) > 1:
+            skip = w in valued
+        elif tool == "env" and re.fullmatch(r"[A-Za-z_]\w*=.*", w):
             continue
-        elif w[:1] in "-+" and len(w) > 1:
-            has_c = has_c or (w[0] == "-" and "c" in w[1:])
+        elif operands:
+            operands -= 1
         else:
-            return w if has_c else None
+            return words[i:]
     return None
 
 
@@ -48,11 +84,10 @@ def merges(words):
         words = words[1:]
     if not words:
         return False
-    # A wrapper such as env, timeout or xargs runs the command after its options and their values.
-    if words[0].rsplit("/", 1)[-1] in WRAPPERS:
-        commands = [i for i, w in enumerate(words) if w.rsplit("/", 1)[-1] in SHELLS | {"gh", "reviewer-gh.sh"}]
-        return bool(commands) and merges(words[commands[0]:])
     tool = words[0].rsplit("/", 1)[-1]
+    if tool in WRAPPERS:
+        command = wrapped(tool, words[1:])
+        return command_merges(command) if isinstance(command, str) else bool(command) and merges(command)
     if tool in SHELLS:
         script = shell_script(words[1:])
         return script is not None and command_merges(script)
@@ -78,13 +113,37 @@ def merges(words):
     return False
 
 
+def strip_comments(command):
+    """The command line with each unquoted comment removed up to, not including, its newline."""
+    out, quote, i = [], None, 0
+    while i < len(command):
+        ch = command[i]
+        if quote == "'":
+            quote = None if ch == "'" else quote
+        elif ch == "\\":
+            out.append(command[i:i + 2])
+            i += 2
+            continue
+        elif quote == '"':
+            quote = None if ch == '"' else quote
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "#" and (not out or out[-1][-1:] in " \t\n;&|()"):
+            end = command.find("\n", i)
+            i = len(command) if end < 0 else end
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def command_merges(command):
     """Whether a shell command line merges a pull request in any of its simple commands."""
     try:
         # An unquoted newline ends a command, as ; does; a quoted one stays in its word.
-        # An unquoted newline ends a command, as ; does; a quoted one stays in its word. A comment is kept as
-        # words of its command, since shlex's comment handling would swallow the newline that ends it.
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=PUNCTUATION)
+        # An unquoted newline ends a command, as ; does; a quoted one stays in its word. Comments are removed
+        # first, since shlex's own comment handling would swallow the newline that ends one.
+        lexer = shlex.shlex(strip_comments(command), posix=True, punctuation_chars=PUNCTUATION)
         lexer.whitespace = " \t\r"
         lexer.commenters = ""
         lexer.whitespace_split = True

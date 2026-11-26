@@ -24,7 +24,10 @@ DENY = [
     "echo 'unbalanced merge",
     "gh pr view 20\n\ngh pr merge 20", "gh pr view 20;\ngh pr merge 20", "gh pr view 20 &&\ngh pr merge 20",
     "gh pr view 20 # read first\ngh pr merge 20", "env -u GH_DEBUG bash -c 'gh pr merge 20'",
-    "timeout 10 gh pr merge 20", "nice -n 5 gh pr merge 20", "xargs -n 1 gh pr merge < f",
+    "timeout 10 gh pr merge 20", "timeout -s KILL 10 gh pr merge 20",
+    "gh pr view 20 # don't\ngh pr merge 20 # won't", "env -u gh bash -c 'gh pr merge 20'",
+    "env -u bash bash -c 'gh pr merge 20'", "env -S 'gh pr merge 20'", "env FOO=1 gh pr merge 20",
+    "bash -co pipefail 'gh pr merge 20'", "bash -oc pipefail 'gh pr merge 20'", "bash -c -- '-x; gh pr merge 20'", "nice -n 5 gh pr merge 20", "xargs -n 1 gh pr merge < f",
 ]
 ALLOW = [
     "gh pr view 5", "gh pr comment 5 --body merge", "gh pr diff 20 --name-only",
@@ -32,6 +35,7 @@ ALLOW = [
     "gh pr comment 5 --body 'line one\ngh pr merge 5\nline three'",
     "reviewer-gh.sh o/r d api repos/o/r/pulls/16/reviews -X POST -f 'body=The mergePullRequest mutation needs review.'",
     "bash -c 'gh pr comment 20 --body \"$1\"' _ 'gh pr merge 20'", "bash script.sh 'gh pr merge 20'",
+    "gh pr comment 20 --body 'see #3; gh pr merge is denied'", "gh pr view 20 # gh pr merge 20 later",
     "git log --merges a..b", "git diff a b -- x", "bash -lc 'gh pr view 5'", "jq -r .x f | head",
 ]
 
