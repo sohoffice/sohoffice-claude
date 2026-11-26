@@ -22,12 +22,16 @@ DENY = [
     "gh api graphql -fquery='mutation{mergePullRequest(input:{}){clientMutationId}}'",
     "gh api graphql -F 'query=mutation {\n mergePullRequest(input:{}) { clientMutationId }\n}'",
     "echo 'unbalanced merge",
+    "gh pr view 20\n\ngh pr merge 20", "gh pr view 20;\ngh pr merge 20", "gh pr view 20 &&\ngh pr merge 20",
+    "gh pr view 20 # read first\ngh pr merge 20", "env -u GH_DEBUG bash -c 'gh pr merge 20'",
+    "timeout 10 gh pr merge 20", "nice -n 5 gh pr merge 20", "xargs -n 1 gh pr merge < f",
 ]
 ALLOW = [
     "gh pr view 5", "gh pr comment 5 --body merge", "gh pr diff 20 --name-only",
     "gh pr comment 5 --body 'gh pr merge is denied; see pulls/16/merge and mergePullRequest'",
     "gh pr comment 5 --body 'line one\ngh pr merge 5\nline three'",
     "reviewer-gh.sh o/r d api repos/o/r/pulls/16/reviews -X POST -f 'body=The mergePullRequest mutation needs review.'",
+    "bash -c 'gh pr comment 20 --body \"$1\"' _ 'gh pr merge 20'", "bash script.sh 'gh pr merge 20'",
     "git log --merges a..b", "git diff a b -- x", "bash -lc 'gh pr view 5'", "jq -r .x f | head",
 ]
 
