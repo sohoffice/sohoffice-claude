@@ -104,7 +104,7 @@ A round is one review. At most three rounds run. A round-3 review that still has
 
 ## Requesting a review
 
-Write the [review prompt](#review-prompt), filled in with round `r`, PR `<N>`, `<owner>/<repo>`, the App config directory and the Slack channel ID, `<thread ts>` and Slack language (drop the Slack paragraph for a project with no [Slack thread](#slack-thread)), to a prompt file. Keep the `[With an App]` lines for a project with a [reviewer GitHub App](#reviewer-identity) and the `[Without an App]` lines otherwise, dropping the brackets. Where the project's settings give review checks for a PR of this kind, keep the `[Project checks]` lines too, filled in with those checks in the project's own words; otherwise drop them. In round 1 keep the `[Round 1]` lines; in a later round keep the `[Later round]` lines instead, filled in with `<previous head>`, the head commit the previous round reviewed, and `<head>`, the PR's head now, so the reviewer reads what changed since then and not the whole PR again. A line with two tags is kept only when both apply. Where `<previous head>` is not an ancestor of `<head>` (`git merge-base --is-ancestor <previous head> <head>` fails), as after a rebase, keep the `[Round 1]` lines: that round reviews the whole PR. `<effort>` in the command is the project's reviewer effort for a PR of this kind, or the [Reviewer](#reviewer) table's. Then run the reviewer from the repository root, in the background (a high-effort review takes minutes). With Codex:
+Write the [review prompt](#review-prompt), filled in with round `r`, PR `<N>`, `<owner>/<repo>`, the App config directory and the Slack channel ID, `<thread ts>` and Slack language (drop the Slack paragraph for a project with no [Slack thread](#slack-thread)), to a prompt file. Keep the `[With an App]` lines for a project with a [reviewer GitHub App](#reviewer-identity) and the `[Without an App]` lines otherwise, dropping the brackets. Where the project's settings give review checks for a PR of this kind, keep the `[Project checks]` lines too, filled in with those checks in the project's own words; otherwise drop them. In round 1 keep the `[Round 1]` lines; in a later round keep the `[Later round]` lines instead, filled in with `<previous head>`, the head commit the previous round reviewed, and `<head>`, the PR's head now, which the author pushed from the checkout the reviewer runs in, so the reviewer reads what changed since then and not the whole PR again. `<previous head>` is the `commit_id` of the previous round's review (`gh api repos/{owner}/{repo}/pulls/<N>/reviews`); where that round approved without an App, so left a comment and not a review, it is the last commit pushed before that comment (`gh pr view <N> --json commits,comments`). A line with two tags is kept only when both apply. Where `<previous head>` is not an ancestor of `<head>` (`git merge-base --is-ancestor <previous head> <head>` fails), as after a rebase, keep the `[Round 1]` lines: that round reviews the whole PR. `<effort>` in the command is the project's reviewer effort for a PR of this kind, or the [Reviewer](#reviewer) table's. Then run the reviewer from the repository root, in the background (a high-effort review takes minutes). With Codex:
 
 ```bash
 codex exec -m gpt-6.1-sol -c model_reasoning_effort='"<effort>"' --approve-for-me \
@@ -120,13 +120,15 @@ Codex cannot run a round when its output says its usage limit is reached (`You'v
 
 ```bash
 claude -p --model opus --effort <effort> --setting-sources user \
-  --allowedTools "Bash(gh *)" "Bash(git *)" "Bash(jq *)" "Bash(cat *)" "Bash(printf *)" \
-    "Bash(~/.claude/skills/pr-review/*)" Read Grep Glob \
+  --allowedTools "Bash(gh *)" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" \
+    "Bash(git merge-base *)" "Bash(git rev-parse *)" "Bash(git cat-file *)" "Bash(jq *)" \
+    "Bash(cat *)" "Bash(printf *)" "Bash(~/.claude/skills/pr-review/*)" Read Grep Glob \
+  --disallowedTools "Bash(gh pr merge *)" "Bash(~/.claude/skills/pr-review/reviewer-gh.sh * pr merge *)" \
   --output-format text < <scratchpad>/pr-review-<N>-r<r>-prompt.md > <scratchpad>/pr-review-<N>-r<r>.md
 ```
 
 - **A separate run, never a subagent.** The fallback is its own `claude -p` process, as Codex is its own `codex exec` process, so the reviewer App's token stays in the reviewer's run. An Agent subagent of the author session would be the author reviewing, and minting the token, in its own session.
-- **What it may do.** The allowed tools let it read the repository, run `gh` and `git`, post as the App through `reviewer-gh.sh` and reply in Slack through `slack-post.sh`; it cannot edit files. `--setting-sources user` leaves out the project's settings, so the project's hooks do not run for it.
+- **What it may do.** It has no Edit or Write tool; its `git` is limited to reading history and diffs; and merging a PR is denied, a deny rule taking precedence over the allow list. It runs `gh`, posts as the App through `reviewer-gh.sh` and replies in Slack through `slack-post.sh`. What else `gh api` could write is held back only by the prompt's "Do not edit code, commit, or push", since it runs without Codex's sandbox. `--setting-sources user` leaves out the project's settings, so the project's hooks do not run for it.
 - **Its approval counts as the reviewer's.** A round the fallback approves is approved, as one Codex approves, for merging and for the human approval gate alike.
 - **Codex first again.** Each round tries Codex first; the fallback is for the round Codex cannot run, not for the rest of the PR.
 - **Say which reviewer ran.** Say in the Slack thread and in the [human approval](#human-approval) request which rounds the fallback reviewed, since it is the same model family as the author and may share its blind spots.
@@ -142,9 +144,10 @@ You are reviewing GitHub PR #<N> in this repository, round <r> of at most 3.
 [Round 1] Read the PR with `gh pr view <N>` and `gh pr diff <N>`, and the surrounding code as needed.
 [Later round] Read the PR with `gh pr view <N>`. The previous round reviewed commit <previous head>;
 [Later round] review only what changed since then, not the whole PR again. List the PR's files with
-[Later round] `gh pr diff <N> --name-only`, run `git fetch origin pull/<N>/head`, and read
-[Later round] `git diff <previous head> <head> -- <those files>`, which keeps to the PR's files and so
-[Later round] leaves out what a merge from the base branch brought in.
+[Later round] `gh pr diff <N> --name-only`, and read `git diff <previous head> <head> -- <those files>`;
+[Later round] both commits are in this checkout. Keeping to the PR's files leaves out what a merge from
+[Later round] the base branch changed in other files, but not in these: if `git log --merges <previous head>..<head>`
+[Later round] lists a merge, a hunk you did not expect may be the base branch's, which `git diff <merge>^1 <merge>` shows.
 [Later round] Read other code only as far as you need to judge that change and the earlier findings.
 [Later round] First read the earlier review comments and Claude's replies
 [Later round] (`gh api repos/{owner}/{repo}/pulls/<N>/comments`, `gh pr view <N> --comments`) and
