@@ -1,0 +1,8 @@
+{
+  "effort": "high",
+  "reviewers": [
+    { "tool": "codex", "model": "gpt-6.1-sol" },
+    { "tool": "claude", "model": "opus" },
+    { "tool": "agy", "model": "gemini-3.8-flash", "efforts": ["low", "medium", "high"] }
+  ]
+}
