@@ -26,7 +26,12 @@ agy_settings='{"permissions":{
     "command(~/.claude/skills/pr-review/slack-post.sh)","read_file(*)"],
   "deny":["command(gh pr merge)","command(~/.claude/skills/pr-review/reviewer-gh.sh .* .* pr merge)","write_file(*)"]}}'
 
+# Codex reads execution policy rules only from its home's rules folder, so its rule against `gh pr merge` is installed
+# there and binds every Codex session of this user (#15).
 run_codex() {
+  local rules=${CODEX_HOME:-$HOME/.codex}/rules
+  mkdir -p "$rules" && { cmp -s "$here/codex-pr-review.rules" "$rules/pr-review.rules" ||
+    cp "$here/codex-pr-review.rules" "$rules/pr-review.rules"; } || return 1
   codex exec -m "$1" -c model_reasoning_effort="\"$2\"" --approve-for-me \
     -c sandbox_workspace_write.network_access=true -o "$out" - < "$prompt" > "$logs.codex.log" 2>&1
 }
