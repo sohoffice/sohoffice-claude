@@ -103,7 +103,7 @@ A round is one review. At most three rounds run. A round-3 review that still has
 
 ## Requesting a review
 
-Write the [review prompt](#review-prompt), filled in with round `r`, PR `<N>`, `<owner>/<repo>`, the App config directory and the Slack channel ID, `<thread ts>` and Slack language (drop the Slack paragraph for a project with no [Slack thread](#slack-thread)), to a prompt file. Keep the `[With an App]` lines for a project with a [reviewer GitHub App](#reviewer-identity) and the `[Without an App]` lines otherwise, dropping the brackets. Where the project's settings give review checks for a PR of this kind, keep the `[Project checks]` lines too, filled in with those checks in the project's own words; otherwise drop them. `<effort>` in the command is the project's reviewer effort for a PR of this kind, or the [Reviewer](#reviewer) table's. Then run the reviewer from the repository root, in the background (a high-effort review takes minutes). With Codex:
+Write the [review prompt](#review-prompt), filled in with round `r`, PR `<N>`, `<owner>/<repo>`, the App config directory and the Slack channel ID, `<thread ts>` and Slack language (drop the Slack paragraph for a project with no [Slack thread](#slack-thread)), to a prompt file. Keep the `[With an App]` lines for a project with a [reviewer GitHub App](#reviewer-identity) and the `[Without an App]` lines otherwise, dropping the brackets. Where the project's settings give review checks for a PR of this kind, keep the `[Project checks]` lines too, filled in with those checks in the project's own words; otherwise drop them. In round 1 keep the `[Round 1]` lines; in a later round keep the `[Later round]` lines instead, filled in with `<previous head>`, the head commit the previous round reviewed, and `<head>`, the PR's head now, so the reviewer reads what changed since then and not the whole PR again. A line with two tags is kept only when both apply. Where `<previous head>` is not an ancestor of `<head>` (`git merge-base --is-ancestor <previous head> <head>` fails), as after a rebase, keep the `[Round 1]` lines: that round reviews the whole PR. `<effort>` in the command is the project's reviewer effort for a PR of this kind, or the [Reviewer](#reviewer) table's. Then run the reviewer from the repository root, in the background (a high-effort review takes minutes). With Codex:
 
 ```bash
 codex exec -m gpt-6.1-sol -c model_reasoning_effort='"<effort>"' --approve-for-me \
@@ -120,19 +120,25 @@ You are reviewing GitHub PR #<N> in this repository, round <r> of at most 3.
 [With an App] Run every `gh` command, including `gh api`, as
 [With an App] `GH_TOKEN=$(~/.claude/skills/pr-review/reviewer-gh-token.sh <owner>/<repo> <App config directory>) gh ...`,
 [With an App] so you post as the reviewer App.
-Read the PR with `gh pr view <N>` and `gh pr diff <N>`, and the surrounding code as needed.
-On rounds 2 and 3, first read the earlier review comments and Claude's replies
-(`gh api repos/{owner}/{repo}/pulls/<N>/comments`, `gh pr view <N> --comments`) and
-check each earlier finding is fixed or convincingly answered. Threads Claude resolved
-are ones it says it fixed: verify the fix, and if it is inadequate raise a new inline
-comment. Threads left unresolved are ones Claude disputed: if its reasoning convinces
-you, resolve the thread (GraphQL `resolveReviewThread`); otherwise reply in the thread
-and keep it as a finding.
+[Round 1] Read the PR with `gh pr view <N>` and `gh pr diff <N>`, and the surrounding code as needed.
+[Later round] Read the PR with `gh pr view <N>`. The previous round reviewed commit <previous head>;
+[Later round] review only what changed since then, not the whole PR again. Read the change with
+[Later round] `git fetch origin pull/<N>/head && git diff <previous head> <head> -- $(gh pr diff <N> --name-only)`,
+[Later round] which keeps to the PR's files and so leaves out what a merge from the base branch brought in.
+[Later round] Read other code only as far as you need to judge that change and the earlier findings.
+[Later round] First read the earlier review comments and Claude's replies
+[Later round] (`gh api repos/{owner}/{repo}/pulls/<N>/comments`, `gh pr view <N> --comments`) and
+[Later round] check each earlier finding is fixed or convincingly answered. Threads Claude resolved
+[Later round] are ones it says it fixed: verify the fix, and if it is inadequate raise a new inline
+[Later round] comment. Threads left unresolved are ones Claude disputed: if its reasoning convinces
+[Later round] you, resolve the thread (GraphQL `resolveReviewThread`); otherwise reply in the thread
+[Later round] and keep it as a finding.
 
 Review for correctness, security, missed requirements, and maintainability. Do not edit
 code, commit, or push.
 [Project checks] This project also asks, for a PR of this kind: <review checks>
 [Project checks] Make each check in full, and raise each thing it finds as a finding.
+[Project checks][Later round] An earlier round made them for the whole PR; in this round make them for what changed since <previous head>.
 
 If you have findings: submit ONE review with inline comments through
 `gh api repos/{owner}/{repo}/pulls/<N>/reviews` with `event: "COMMENT"` and a
